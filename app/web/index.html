@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="AI Company OS CEO 운영 대시보드" />
+    <title>AI Company OS · CEO Desk</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="AI Company OS 홈">
+        <span class="brand-mark">A</span>
+        <span><strong>AI Company OS</strong><small>CEO Desk</small></span>
+      </a>
+      <div class="connection" id="connection"><span></span> 연결 확인 중</div>
+    </header>
+
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">대표 전용 운영실</p>
+          <h1>지시는 한 번.<br />조사부터 검수까지.</h1>
+          <p class="hero-copy">AI 비서실장이 팀을 조율하고, 중요한 결정만 대표에게 올립니다.</p>
+        </div>
+        <form class="command-card" id="task-form">
+          <label for="task-request">새 업무 지시</label>
+          <textarea id="task-request" rows="5" required placeholder="예: 경쟁사 5곳을 조사하고 다음 분기 진입 전략을 만들어줘."></textarea>
+          <div class="form-row">
+            <select id="task-priority" aria-label="업무 우선순위">
+              <option value="3">보통 우선순위</option>
+              <option value="1">최우선</option>
+              <option value="2">높음</option>
+              <option value="4">낮음</option>
+              <option value="5">보류 가능</option>
+            </select>
+            <button type="submit" id="submit-task">업무 맡기기 <span>→</span></button>
+          </div>
+          <p class="form-status" id="form-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="metrics" aria-label="운영 현황">
+        <article><span>진행 중</span><strong id="metric-active">0</strong></article>
+        <article><span>완료</span><strong id="metric-completed">0</strong></article>
+        <article><span>승인 대기</span><strong id="metric-approvals">0</strong></article>
+        <article><span>총 토큰</span><strong id="metric-tokens">0</strong></article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel tasks-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">WORKSTREAM</p><h2>최근 업무</h2></div>
+            <button class="text-button" id="refresh-button">새로고침</button>
+          </div>
+          <div class="task-list" id="task-list"><p class="empty">업무를 불러오는 중입니다.</p></div>
+        </article>
+
+        <aside class="panel approval-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">HUMAN IN THE LOOP</p><h2>대표 승인함</h2></div>
+          </div>
+          <p class="panel-note">현재 승인은 의사결정으로 기록되며, 실제 발송·결제·삭제·배포는 자동 실행하지 않습니다.</p>
+          <div id="approval-list"><p class="empty">승인 요청이 없습니다.</p></div>
+        </aside>
+      </section>
+
+      <section class="panel context-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">COMPANY MEMORY</p><h2>회사 맥락</h2></div>
+          <div class="panel-actions">
+            <button class="text-button" id="add-memory-button">기억 추가</button>
+            <button class="primary-button compact-button" id="add-decision-button">대표 결정 기록</button>
+          </div>
+        </div>
+        <div class="context-grid">
+          <div class="context-card">
+            <span class="context-count" id="memory-count">0</span>
+            <h3>기억</h3>
+            <div id="memory-list"><p class="empty">저장된 기억이 없습니다.</p></div>
+          </div>
+          <div class="context-card">
+            <span class="context-count" id="decision-count">0</span>
+            <h3>대표 결정</h3>
+            <div id="decision-list"><p class="empty">기록된 결정이 없습니다.</p></div>
+          </div>
+          <div class="context-card">
+            <span class="context-count" id="knowledge-count">0</span>
+            <h3>축적된 지식</h3>
+            <div id="knowledge-list"><p class="empty">아직 축적된 지식이 없습니다.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel activity-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">AUDIT TRAIL</p><h2>최근 활동</h2></div>
+        </div>
+        <div id="activity-list" class="activity-list"><p class="empty">활동을 불러오는 중입니다.</p></div>
+      </section>
+    </main>
+
+    <dialog id="settings-dialog">
+      <form method="dialog" id="settings-form">
+        <div class="panel-heading"><h2>연결 설정</h2><button value="cancel" class="close-button" aria-label="닫기">×</button></div>
+        <label for="api-key">API 키</label>
+        <input id="api-key" type="password" autocomplete="current-password" placeholder="APP_API_KEY" />
+        <label for="tenant-id">회사 ID</label>
+        <input id="tenant-id" value="owner" maxlength="80" />
+        <button class="primary-button" value="save">저장하고 연결</button>
+      </form>
+    </dialog>
+    <dialog id="memory-dialog">
+      <form id="memory-form">
+        <div class="panel-heading"><h2>회사 기억 추가</h2><button type="button" class="close-button" data-close-dialog="memory-dialog" aria-label="닫기">×</button></div>
+        <label for="memory-category">분류</label>
+        <select id="memory-category">
+          <option value="preference">대표 선호</option>
+          <option value="policy">운영 원칙</option>
+          <option value="company">회사 정보</option>
+          <option value="customer">고객 정보</option>
+          <option value="reporting">보고 방식</option>
+        </select>
+        <label for="memory-content">기억할 내용</label>
+        <textarea id="memory-content" rows="4" required placeholder="예: 모든 보고서는 결론과 다음 행동부터 제시한다."></textarea>
+        <p class="form-status" id="memory-status" aria-live="polite"></p>
+        <button class="primary-button" type="submit">기억 저장</button>
+      </form>
+    </dialog>
+    <dialog id="decision-dialog">
+      <form id="decision-form">
+        <div class="panel-heading"><h2>대표 결정 기록</h2><button type="button" class="close-button" data-close-dialog="decision-dialog" aria-label="닫기">×</button></div>
+        <label for="decision-subject">결정 주제</label>
+        <input id="decision-subject" required maxlength="240" placeholder="예: 첫 진출 시장" />
+        <label for="decision-choice">선택한 내용</label>
+        <textarea id="decision-choice" rows="3" required placeholder="예: 한국 시장부터 시작한다."></textarea>
+        <label for="decision-rationale">결정 이유</label>
+        <textarea id="decision-rationale" rows="3" required placeholder="예: 초기 고객 접근성과 검증 속도가 가장 높다."></textarea>
+        <p class="form-status" id="decision-status" aria-live="polite"></p>
+        <button class="primary-button" type="submit">결정 저장</button>
+      </form>
+    </dialog>
+    <button class="settings-button" id="settings-button" aria-label="연결 설정">설정</button>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

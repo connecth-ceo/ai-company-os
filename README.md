@@ -1,0 +1,58 @@
+# AI Company OS
+
+대표(CEO)가 자연어로 업무를 지시하면 AI 비서실장이 조사·전략 담당을 조율하고,
+검증 담당의 PASS/REWORK 판정을 거쳐 결과를 보고하는 클라우드 우선 V0입니다.
+
+## 현재 포함된 것
+
+- FastAPI 업무 API와 자동 문서 (`/docs`)
+- Chief of Staff, Research, Strategy, Reviewer 실행 흐름
+- PostgreSQL 기반 업무·기억·의사결정·지식·승인 영속화
+- Celery/Redis 백그라운드 작업
+- OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
+- Docker Compose 로컬/배포 기준 구성
+- API 키 인증, 회사별 데이터 격리, 중복 요청 방지
+- 실행 재시도·시간 제한·토큰 사용량·감사 이벤트
+- CEO 웹 대시보드와 Telegram webhook
+- 저장된 회사 기억·대표 결정·지식을 다음 AI 업무에 자동 반영
+- 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
+- CEO Desk에서 회사 기억과 대표 결정을 직접 기록
+- Alembic 데이터베이스 마이그레이션
+- Render용 클라우드 Blueprint
+
+## 가장 빠른 실행
+
+Windows에서 Docker 없이 먼저 사용하려면 `START_AI_COMPANY_MOCK.bat`을 더블클릭합니다. OpenAI
+API 키를 `.env`에 설정한 뒤에는 `START_AI_COMPANY_REAL_AI.bat`으로 실제 AI 모드를 실행할 수 있습니다.
+
+Docker 전체 구성은 다음 순서입니다.
+
+1. `.env.example`을 `.env`로 복사합니다.
+2. 첫 확인은 `AI_PROVIDER=mock` 그대로 둡니다.
+3. `docker compose up --build`를 실행합니다.
+4. 브라우저에서 `http://localhost:8000`을 열면 CEO Desk가 표시됩니다.
+5. 개발용 API 문서는 `http://localhost:8000/docs`입니다.
+
+실제 AI 실행은 `.env`의 `AI_PROVIDER=openai`, `OPENAI_API_KEY=...`로 바꾼 뒤
+API와 worker를 다시 시작하면 됩니다. 비밀 키는 저장소에 커밋하지 마세요.
+
+Docker 없이 개발할 때는 `DATABASE_URL=sqlite+aiosqlite:///./ai_company.db`,
+`TASK_EXECUTION_MODE=inline`을 사용하면 Redis/PostgreSQL 없이도 확인할 수 있습니다.
+
+실제 OpenAI, Telegram, Docker, Render 설정 방법과 검증 체크리스트는
+[docs/SETUP_AND_OPERATIONS_KO.md](docs/SETUP_AND_OPERATIONS_KO.md)에 있습니다.
+전체 설계는 [docs/MASTER_IMPLEMENTATION_SPEC.md](docs/MASTER_IMPLEMENTATION_SPEC.md)에 있습니다.
+V2 리팩터링 전 V0.4 기준선은 [docs/V0_4_BASELINE_KO.md](docs/V0_4_BASELINE_KO.md), 데이터 백업·복구는
+[docs/DB_BACKUP_RESTORE_KO.md](docs/DB_BACKUP_RESTORE_KO.md), 주요 구조 결정은
+[ADR-0001](docs/adr/0001-preserve-v0-control-plane-and-add-runtime-boundaries.md)에 기록되어 있습니다.
+
+## V0.4에서 이어지는 실제 사용 흐름
+
+1. CEO Desk에서 회사 원칙과 대표 선호를 `회사 기억`으로 저장합니다.
+2. 중요한 선택은 `대표 결정`으로 기록합니다.
+3. 새 업무를 지시하면 최근 기억·결정·축적 지식이 AI 팀에 자동 전달됩니다.
+4. Research 결과는 회사 지식으로 자동 축적됩니다.
+5. 외부 발송·결제·삭제·배포처럼 영향이 있는 행동은 실행하지 않고 승인함에 올립니다.
+
+V0.4의 승인은 대표 결정을 안전하게 기록하는 단계입니다. 승인 버튼을 눌러도 실제 이메일 발송,
+결제, 삭제 또는 배포를 자동 실행하지 않습니다. 승인 후 도구 실행은 V1에서 권한 정책과 함께 연결합니다.

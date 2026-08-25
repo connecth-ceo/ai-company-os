@@ -1,0 +1,176 @@
+import asyncio
+import time
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.agents.orchestrator import orchestrate
+from app.core.config import get_settings
+from app.models import Approval, KnowledgeItem, Task, TaskRun, TaskStatus
+from app.services.audit import add_audit_event
+from app.services.company_context import build_company_context
+
+
+class TaskExecutionError(RuntimeError):
+    pass
+
+
+async def execute_task(
+    session: AsyncSession, task_id: str, *, raise_on_failure: bool = False
+) -> None:
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise LookupError(f"Task {task_id} not found")
+    if task.status == TaskStatus.RUNNING:
+        return
+
+    attempt_query = select(func.count(TaskRun.id)).where(TaskRun.task_id == task.id)
+    attempt = int((await session.scalar(attempt_query)) or 0) + 1
+    task.status = TaskStatus.RUNNING
+    task.error = None
+    run = TaskRun(task_id=task.id, status=TaskStatus.RUNNING, attempt=attempt)
+    session.add(run)
+    add_audit_event(
+        session,
+        tenant_id=task.tenant_id,
+        actor="system",
+        action="task.started",
+        resource_type="task",
+        resource_id=task.id,
+        details={"attempt": attempt},
+    )
+    await session.commit()
+
+    started = time.perf_counter()
+    caught: Exception | None = None
+    try:
+        settings = get_settings()
+        company_context = await build_company_context(session, task.tenant_id)
+        outcome = await asyncio.wait_for(
+            orchestrate(task.request, settings, company_context),
+            timeout=settings.task_timeout_seconds,
+        )
+        task.result = outcome.final_report
+        task.status = TaskStatus.COMPLETED
+        run.status = TaskStatus.COMPLETED
+        run.verdict = outcome.verdict
+        run.feedback = outcome.feedback
+        run.artifacts = outcome.artifacts()
+        run.input_tokens = outcome.input_tokens
+        run.output_tokens = outcome.output_tokens
+        run.total_tokens = outcome.total_tokens
+        run.finished_at = datetime.now(UTC)
+        run.duration_ms = round((time.perf_counter() - started) * 1000)
+        existing_knowledge = await session.scalar(
+            select(KnowledgeItem.id).where(
+                KnowledgeItem.tenant_id == task.tenant_id,
+                KnowledgeItem.task_id == task.id,
+                KnowledgeItem.source == "Research Agent",
+            )
+        )
+        if existing_knowledge is None:
+            session.add(
+                KnowledgeItem(
+                    tenant_id=task.tenant_id,
+                    title=f"Research: {task.title}",
+                    content=outcome.research,
+                    source="Research Agent",
+                    task_id=task.id,
+                )
+            )
+
+        existing_approval_actions = set(
+            await session.scalars(
+                select(Approval.action).where(
+                    Approval.tenant_id == task.tenant_id,
+                    Approval.task_id == task.id,
+                )
+            )
+        )
+        for approval_request in outcome.approval_requests:
+            if approval_request.action in existing_approval_actions:
+                continue
+            approval = Approval(
+                tenant_id=task.tenant_id,
+                task_id=task.id,
+                action=approval_request.action,
+                reason=approval_request.reason,
+                risk=approval_request.risk,
+            )
+            session.add(approval)
+            await session.flush()
+            add_audit_event(
+                session,
+                tenant_id=task.tenant_id,
+                actor="Chief of Staff",
+                action="approval.requested",
+                resource_type="approval",
+                resource_id=approval.id,
+                details={"task_id": task.id, "risk": approval_request.risk},
+            )
+            existing_approval_actions.add(approval_request.action)
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor="system",
+            action="task.completed",
+            resource_type="task",
+            resource_id=task.id,
+            details={"attempt": attempt, "total_tokens": outcome.total_tokens},
+        )
+    except Exception as exc:
+        caught = exc
+        task.status = TaskStatus.FAILED
+        task.error = f"{type(exc).__name__}: {exc}"
+        run.status = TaskStatus.FAILED
+        run.feedback = task.error
+        run.finished_at = datetime.now(UTC)
+        run.duration_ms = round((time.perf_counter() - started) * 1000)
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor="system",
+            action="task.failed",
+            resource_type="task",
+            resource_id=task.id,
+            details={"attempt": attempt, "error": task.error},
+        )
+    await session.commit()
+    if caught is None and task.source == "telegram" and task.external_ref:
+        from app.services.telegram import send_telegram_message
+
+        await send_telegram_message(
+            get_settings(),
+            task.external_ref,
+            f"업무 완료: {task.title}\n\n{task.result or '(결과 없음)'}",
+        )
+    if caught and raise_on_failure:
+        raise TaskExecutionError(str(caught)) from caught
+
+
+async def execute_task_with_new_session(
+    task_id: str,
+    retry_inline: bool = True,
+    raise_on_failure: bool = False,
+) -> None:
+    from app.db import SessionLocal
+
+    settings = get_settings()
+    attempts = settings.task_max_attempts if retry_inline else 1
+    last_error: TaskExecutionError | None = None
+    for attempt_number in range(attempts):
+        try:
+            async with SessionLocal() as session:
+                await execute_task(session, task_id, raise_on_failure=True)
+            return
+        except TaskExecutionError as exc:
+            last_error = exc
+            if attempt_number + 1 < attempts:
+                async with SessionLocal() as session:
+                    task = await session.get(Task, task_id)
+                    if task:
+                        task.status = TaskStatus.DISPATCHED
+                        await session.commit()
+    if raise_on_failure and last_error:
+        raise last_error
