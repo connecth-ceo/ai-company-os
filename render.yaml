@@ -28,10 +28,16 @@ services:
         value: openai
       - key: OPENAI_MODEL
         value: gpt-5.6-luna
+      - key: OPENAI_TRACING_ENABLED
+        value: "false"
+      - key: OPENAI_STORE_RESPONSES
+        value: "false"
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: TELEGRAM_ENABLED
+        value: "false"
       - key: TELEGRAM_ALLOWED_CHAT_ID
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
@@ -53,7 +59,7 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: celery -A app.worker.celery_app worker --loglevel=INFO
+    dockerCommand: celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=2
     autoDeployTrigger: checksPass
     maxShutdownDelaySeconds: 120
     envVars:
@@ -74,6 +80,10 @@ services:
           envVarKey: APP_API_KEY
       - key: OPENAI_MODEL
         value: gpt-5.6-luna
+      - key: OPENAI_TRACING_ENABLED
+        value: "false"
+      - key: OPENAI_STORE_RESPONSES
+        value: "false"
       - key: OPENAI_API_KEY
         fromService:
           type: web
@@ -84,6 +94,11 @@ services:
           type: web
           name: ai-company-os
           envVarKey: TELEGRAM_BOT_TOKEN
+      - key: TELEGRAM_ENABLED
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: TELEGRAM_ENABLED
       - key: TELEGRAM_ALLOWED_CHAT_ID
         fromService:
           type: web
@@ -115,6 +130,7 @@ databases:
   - name: ai-company-db
     plan: basic-256mb
     region: singapore
+    postgresMajorVersion: "16"
     databaseName: ai_company
     user: ai_company
     ipAllowList: []

@@ -6,6 +6,8 @@ from app.services.telegram import telegram_api_call
 
 async def main() -> None:
     settings = get_settings()
+    if not settings.telegram_enabled:
+        raise SystemExit("TELEGRAM_ENABLED=true is required")
     if not settings.telegram_webhook_secret:
         raise SystemExit("TELEGRAM_WEBHOOK_SECRET is required")
     webhook_url = f"{settings.public_base_url.rstrip('/')}/integrations/telegram/webhook"
@@ -24,6 +26,8 @@ async def main() -> None:
     print(f"Bot: @{identity['result'].get('username')}")
     print(f"Webhook configured: {result['result']}")
     print(f"Webhook URL: {status['result'].get('url')}")
+    if status["result"].get("last_error_message"):
+        print(f"Last Telegram error: {status['result']['last_error_message']}")
 
 
 if __name__ == "__main__":

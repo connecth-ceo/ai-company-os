@@ -1,6 +1,6 @@
 # AI Company OS 설정·실행·검증 안내서
 
-현재 버전은 V0.4입니다. CEO Desk에서 기억과 대표 결정을 저장하면 이후 업무에 자동 반영되며,
+현재 버전은 V0.4 제어 흐름과 Phase 1 Runtime/Registry 경계를 유지한 운영화 버전입니다. CEO Desk에서 기억과 대표 결정을 저장하면 이후 업무에 자동 반영되며,
 외부 발송·결제·삭제·게시·배포처럼 실제 영향이 있는 요청은 바로 실행하지 않고 승인함에 등록됩니다.
 승인 결정은 현재 감사 가능한 기록으로만 남고 실제 외부 행동은 자동 실행하지 않습니다.
 
@@ -16,17 +16,21 @@
 - Alembic upgrade → downgrade → upgrade 왕복
 - 로컬 HTTP 서버에서 업무 생성 → 실행 → 완료 → 감사 이벤트 저장
 - Render Blueprint 문법 파싱
+- production 설정의 PostgreSQL/worker/인증/비밀값/CORS 강제 검사
+- Docker 이미지 비-root 실행, Celery late acknowledgement와 worker-loss 재처리 설정
+- Caddy 자동 HTTPS 기반 VPS Compose 구성
+- Docker Desktop/WSL 2에서 PostgreSQL, Redis, migration, API, Celery worker 통합 실행
+- 실제 Compose 스택에서 mock 업무 생성 → Celery 처리 → 완료 저장
+- 데스크톱 CEO Desk 렌더링과 브라우저 콘솔 오류 0건 확인
 
 ## 2. 아직 외부 설정 때문에 실행하지 못한 범위
 
 | 항목 | 이유 | 완료 판단 기준 |
 |---|---|---|
 | 실제 OpenAI 응답 | `OPENAI_API_KEY` 없음 | 업무 완료 후 `total_tokens`가 0보다 크고 조사 결과에 실제 출처가 있음 |
-| Docker 전체 구성 | 이 PC에 Docker가 설치되지 않음 | API, worker, PostgreSQL, Redis가 모두 healthy/running |
 | Telegram 실수신·회신 | bot token과 chat ID 없음 | Telegram 메시지가 업무가 되고 완료 보고가 돌아옴 |
 | Render 24시간 배포 | Render/GitHub 계정 연결 권한 없음 | 공개 HTTPS URL의 `/ready`가 `ready` 반환 |
 | Render Blueprint 원격 검증 | Render 인증 정보 없음 | Render Blueprint 생성 화면에서 오류 없이 리소스 미리보기 표시 |
-| 시각적 브라우저 QA | 별도 브라우저 UI 검사를 요청하지 않음 | 데스크톱·모바일에서 CEO Desk를 직접 확인 |
 
 ## 3. OpenAI 실제 AI 연결
 
@@ -39,30 +43,47 @@
 AI_PROVIDER=openai
 OPENAI_API_KEY=발급받은_키
 OPENAI_MODEL=gpt-5.6-luna
+OPENAI_TRACING_ENABLED=false
+OPENAI_STORE_RESPONSES=false
 ```
 
 5. 서비스를 다시 시작하고 CEO Desk에서 작은 테스트 업무를 한 건 맡긴다.
 6. 업무 상세의 `total_tokens`가 0보다 큰지, Research 결과에 출처가 있는지 확인한다.
 
-키를 README, 채팅, Git commit, 화면 캡처에 넣지 않는다. OpenAI SDK는 환경 변수의
-`OPENAI_API_KEY`를 읽도록 구성되어 있다.
+작은 유료 smoke test만 따로 실행하려면 다음 명령을 사용한다. `--confirm-cost` 없이는 호출하지 않는다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_openai.py --confirm-cost
+```
+
+키를 README, 채팅, Git commit, 화면 캡처에 넣지 않는다. 애플리케이션은 `.env` 또는 배포 환경에서 읽은
+`OPENAI_API_KEY`를 로그나 일반 환경 변수로 다시 출력하지 않고 Agents SDK에 직접 전달한다.
+
+회사 맥락이 trace dashboard로 추가 전송되지 않도록 SDK tracing은 기본적으로 꺼져 있다. 운영 관찰을 위해
+trace가 필요하고 데이터 취급 범위를 검토한 뒤에만 `OPENAI_TRACING_ENABLED=true`로 바꾼다.
+Responses API의 별도 응답 저장도 기본적으로 끈다. 대시보드 보관이 명시적으로 필요하고 회사 데이터 취급
+범위를 검토한 뒤에만 `OPENAI_STORE_RESPONSES=true`로 바꾼다.
 
 ## 4. Windows에서 Docker로 전체 실행
 
-현재 PC에는 Docker 명령이 없다. [Docker Desktop Windows 설치 안내](https://docs.docker.com/desktop/setup/install/windows-install/)에서
-Docker Desktop을 설치한다. 일반적인 Windows 환경에서는 WSL 2 backend가 기본 선택이다.
+현재 PC에는 Docker Desktop 4.88.1과 WSL 2.7.3이 설치되어 있고 통합 검증이 완료됐다.
+[Docker Desktop Windows 설치 안내](https://docs.docker.com/desktop/setup/install/windows-install/)는
+재설치나 다른 PC 설정 시 참고한다.
 
 설치 후:
 
 1. 시작 메뉴에서 Docker Desktop을 실행한다.
 2. 화면 왼쪽 아래 상태가 Engine running이 될 때까지 기다린다.
-3. Codex에서 “Docker 설치했으니 전체 구성을 실행하고 검증해줘”라고 요청한다. 이후 작업은 Codex가 수행할 수 있다.
+3. 프로젝트 PowerShell에서 `scripts/run_docker_integration.ps1`을 실행한다.
+4. 마지막에 `Docker integration verified successfully.`가 표시되는지 확인한다.
 
 직접 확인하려면 프로젝트 폴더의 PowerShell에서 다음을 실행한다.
 
 ```powershell
 docker version
-docker compose up --build
+docker compose up -d --build
+docker compose ps
+docker compose exec api python scripts/verify_runtime.py
 ```
 
 브라우저에서 `http://localhost:8000`을 연다. 중지는 해당 PowerShell에서 `Ctrl+C`, 서비스 제거는
@@ -108,13 +129,14 @@ $updates.result | ForEach-Object { $_.message.chat | Select-Object id, username,
 ### 6.3 서버 환경 변수
 
 ```dotenv
+TELEGRAM_ENABLED=true
 TELEGRAM_BOT_TOKEN=BotFather가_준_token
 TELEGRAM_ALLOWED_CHAT_ID=위에서_확인한_숫자
 TELEGRAM_WEBHOOK_SECRET=영문숫자_밑줄_하이픈으로_만든_긴_임의값
 PUBLIC_BASE_URL=https://배포된_서비스_주소
 ```
 
-Webhook secret은 1~256자의 영문 대소문자, 숫자, `_`, `-`만 사용한다. 서버는 Telegram이 보내는
+Webhook secret은 16~256자의 영문 대소문자, 숫자, `_`, `-`만 사용한다. 서버는 Telegram이 보내는
 `X-Telegram-Bot-Api-Secret-Token` 헤더와 이 값을 고정 시간 비교한다.
 
 ### 6.4 Webhook 등록
@@ -157,11 +179,38 @@ Render가 코드를 가져가려면 온라인 Git 저장소가 필요하다.
 7. 배포 완료 후 web service URL을 열고 `/ready`가 `{"status":"ready"}`인지 확인한다.
 8. web service의 Environment 탭에서 자동 생성된 `APP_API_KEY`를 확인해 CEO Desk 설정에 넣는다.
 9. `PUBLIC_BASE_URL`을 배포 URL로 추가하고 Telegram webhook을 등록한다.
+10. Telegram을 실제 사용할 때만 `TELEGRAM_ENABLED=true`로 바꾼다. 그 전에는 `false`를 유지한다.
 
 Render는 `sync: false`로 선언된 secret을 최초 Blueprint 생성 중 입력받고, DB/queue 연결 주소는
 Blueprint가 자동 연결한다. `/ready`는 실제 DB 연결까지 확인하므로 배포 health check로 사용된다.
 
-## 9. 실제 운영 전 최종 체크리스트
+## 9. 단일 VPS에 배포
+
+`deploy/compose.vps.yml`은 API, Celery worker, PostgreSQL, Redis, migration, Caddy HTTPS를 한 서버에
+구성한다. Ubuntu 계열 VPS에 Docker Engine과 Compose plugin을 설치하고, 도메인의 A/AAAA 레코드를 VPS로
+연결한 뒤 방화벽에서 80/443만 공개한다. PostgreSQL과 Redis는 외부 포트를 열지 않는다.
+
+```powershell
+Copy-Item deploy/.env.vps.example deploy/.env.vps
+# 비밀값과 도메인을 deploy/.env.vps에 직접 입력
+docker compose --env-file deploy/.env.vps -f deploy/compose.vps.yml config
+docker compose --env-file deploy/.env.vps -f deploy/compose.vps.yml up -d --build
+docker compose --env-file deploy/.env.vps -f deploy/compose.vps.yml ps
+```
+
+배포 후에는 로컬에서 다음 smoke test로 `/ready` 확인, 업무 생성, Celery 처리, 결과 저장을 한 번에 확인한다.
+
+```powershell
+$secretValue = Read-Host "APP_API_KEY" -AsSecureString
+$env:APP_API_KEY = [System.Net.NetworkCredential]::new('', $secretValue).Password
+.\.venv\Scripts\python.exe scripts\smoke_deployed_task.py https://도메인 --require-token-usage
+Remove-Item Env:APP_API_KEY
+```
+
+운영 업데이트 전에는 `docs/DB_BACKUP_RESTORE_KO.md`에 따라 DB를 백업한다. `down -v`는 운영 데이터
+볼륨을 삭제하므로 사용하지 않는다.
+
+## 10. 실제 운영 전 최종 체크리스트
 
 - CEO Desk에 API 키 없이 접근하면 업무 API가 401을 반환한다.
 - 같은 idempotency key로 업무를 두 번 보내도 하나만 생성된다.
@@ -174,13 +223,13 @@ Blueprint가 자동 연결한다. `/ready`는 실제 DB 연결까지 확인하�
 - PostgreSQL 백업 및 Render 비용 알림을 켠다.
 - `APP_API_KEY`, OpenAI key, Telegram token을 비밀번호 관리자에 보관한다.
 
-## 10. 문제가 생겼을 때 Codex에 전달할 정보
+## 11. 문제가 생겼을 때 Codex에 전달할 정보
 
 비밀값은 보내지 말고 아래만 전달한다.
 
 - 어느 단계에서 실패했는지
 - 화면에 나온 오류 문구
-- `/health`와 `/ready` 응답
+- `/health`와 `/ready` 응답(`/ready`의 database와 redis가 모두 ready인지)
 - task ID와 task 상태
 - Render에서 실패한 서비스 이름(API/worker/DB/queue)
 - 오류 발생 시각과 시간대

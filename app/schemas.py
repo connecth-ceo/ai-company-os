@@ -11,7 +11,7 @@ class ORMModel(BaseModel):
 
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
-    request: str = Field(min_length=1)
+    request: str = Field(min_length=1, max_length=50_000)
     priority: int = Field(default=3, ge=1, le=5)
     idempotency_key: str | None = Field(default=None, max_length=100)
 

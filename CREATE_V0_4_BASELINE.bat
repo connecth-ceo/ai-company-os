@@ -28,6 +28,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
+git rev-parse -q --verify refs/tags/v0.4-baseline >nul 2>&1
+if not errorlevel 1 (
+  echo [INFO] The v0.4-baseline tag already exists. No new commit was created.
+  git log -1 --oneline --decorate v0.4-baseline
+  pause
+  exit /b 0
+)
+
 git check-ignore -q .env
 if errorlevel 1 (
   echo [ERROR] .env is not ignored. Baseline creation stopped.

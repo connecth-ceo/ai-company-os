@@ -2,7 +2,7 @@ import asyncio
 import time
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.orchestrator import orchestrate
@@ -17,18 +17,66 @@ class TaskExecutionError(RuntimeError):
 
 
 async def execute_task(
-    session: AsyncSession, task_id: str, *, raise_on_failure: bool = False
+    session: AsyncSession,
+    task_id: str,
+    *,
+    raise_on_failure: bool = False,
+    recover_running: bool = False,
 ) -> None:
     task = await session.get(Task, task_id)
     if task is None:
         raise LookupError(f"Task {task_id} not found")
-    if task.status == TaskStatus.RUNNING:
+    if task.status == TaskStatus.COMPLETED:
         return
+    if task.status == TaskStatus.RUNNING:
+        if not recover_running:
+            return
+
+    expected_status = task.status
+    expected_updated_at = task.updated_at
+    claim_time = datetime.now(UTC)
+    claim = await session.execute(
+        update(Task)
+        .where(
+            Task.id == task.id,
+            Task.status == expected_status,
+            Task.updated_at == expected_updated_at,
+        )
+        .values(status=TaskStatus.RUNNING, error=None, updated_at=claim_time)
+        .execution_options(synchronize_session=False)
+    )
+    if claim.rowcount != 1:
+        await session.rollback()
+        return
+    task.status = TaskStatus.RUNNING
+    task.error = None
+    task.updated_at = claim_time
+
+    if expected_status == TaskStatus.RUNNING:
+        running_runs = list(
+            await session.scalars(
+                select(TaskRun).where(
+                    TaskRun.task_id == task.id,
+                    TaskRun.status == TaskStatus.RUNNING,
+                )
+            )
+        )
+        for interrupted_run in running_runs:
+            interrupted_run.status = TaskStatus.FAILED
+            interrupted_run.feedback = "Recovered after background worker redelivery"
+            interrupted_run.finished_at = datetime.now(UTC)
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor="system",
+            action="task.recovered",
+            resource_type="task",
+            resource_id=task.id,
+            details={"interrupted_runs": len(running_runs)},
+        )
 
     attempt_query = select(func.count(TaskRun.id)).where(TaskRun.task_id == task.id)
     attempt = int((await session.scalar(attempt_query)) or 0) + 1
-    task.status = TaskStatus.RUNNING
-    task.error = None
     run = TaskRun(task_id=task.id, status=TaskStatus.RUNNING, attempt=attempt)
     session.add(run)
     add_audit_event(
@@ -140,11 +188,21 @@ async def execute_task(
     if caught is None and task.source == "telegram" and task.external_ref:
         from app.services.telegram import send_telegram_message
 
-        await send_telegram_message(
+        delivered = await send_telegram_message(
             get_settings(),
             task.external_ref,
             f"업무 완료: {task.title}\n\n{task.result or '(결과 없음)'}",
         )
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor="system",
+            action=("telegram.notification.sent" if delivered else "telegram.notification.failed"),
+            resource_type="task",
+            resource_id=task.id,
+            details={"chat_id": task.external_ref},
+        )
+        await session.commit()
     if caught and raise_on_failure:
         raise TaskExecutionError(str(caught)) from caught
 
@@ -153,6 +211,7 @@ async def execute_task_with_new_session(
     task_id: str,
     retry_inline: bool = True,
     raise_on_failure: bool = False,
+    recover_running: bool = False,
 ) -> None:
     from app.db import SessionLocal
 
@@ -162,7 +221,12 @@ async def execute_task_with_new_session(
     for attempt_number in range(attempts):
         try:
             async with SessionLocal() as session:
-                await execute_task(session, task_id, raise_on_failure=True)
+                await execute_task(
+                    session,
+                    task_id,
+                    raise_on_failure=True,
+                    recover_running=recover_running,
+                )
             return
         except TaskExecutionError as exc:
             last_error = exc

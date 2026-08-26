@@ -7,7 +7,20 @@ from app.services.task_service import TaskExecutionError, execute_task_with_new_
 
 settings = get_settings()
 celery_app = Celery("ai_company_os", broker=settings.redis_url, backend=settings.redis_url)
-celery_app.conf.update(task_track_started=True, task_serializer="json", accept_content=["json"])
+celery_app.conf.update(
+    task_track_started=True,
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    broker_connection_retry_on_startup=True,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
+    broker_transport_options={"visibility_timeout": settings.task_timeout_seconds + 300},
+    result_expires=86400,
+    task_soft_time_limit=settings.task_timeout_seconds + 30,
+    task_time_limit=settings.task_timeout_seconds + 60,
+)
 
 
 @celery_app.task(
@@ -17,7 +30,9 @@ celery_app.conf.update(task_track_started=True, task_serializer="json", accept_c
 )
 def execute_task_job(self, task_id: str) -> None:
     try:
-        asyncio.run(execute_task_with_new_session(task_id, False, True))
+        delivery_info = self.request.delivery_info or {}
+        recover_running = bool(delivery_info.get("redelivered"))
+        asyncio.run(execute_task_with_new_session(task_id, False, True, recover_running))
     except TaskExecutionError as exc:
         countdown = min(2 ** (self.request.retries + 1), 30)
         raise self.retry(exc=exc, countdown=countdown) from exc

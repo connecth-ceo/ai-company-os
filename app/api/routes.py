@@ -126,7 +126,22 @@ async def run_task(
     if settings.task_execution_mode == "worker":
         from app.worker import execute_task_job
 
-        execute_task_job.delay(task.id)
+        try:
+            execute_task_job.delay(task.id)
+        except Exception as exc:
+            task.status = task.status.QUEUED
+            task.error = f"Queue dispatch failed: {type(exc).__name__}"
+            add_audit_event(
+                session,
+                tenant_id=context.tenant_id,
+                actor="system",
+                action="task.dispatch_failed",
+                resource_type="task",
+                resource_id=task.id,
+                details={"error_type": type(exc).__name__},
+            )
+            await session.commit()
+            raise HTTPException(status_code=503, detail="Background queue is unavailable") from exc
     else:
         background_tasks.add_task(execute_task_with_new_session, task.id, True, False)
     add_audit_event(

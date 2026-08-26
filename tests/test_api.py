@@ -4,6 +4,15 @@ def test_health(client):
     assert response.json()["status"] == "ok"
 
 
+def test_task_request_size_is_bounded(client):
+    response = client.post(
+        "/api/v1/tasks",
+        json={"title": "Oversized", "request": "x" * 50_001},
+    )
+
+    assert response.status_code == 422
+
+
 def test_task_runs_end_to_end_in_mock_mode(client):
     created = client.post(
         "/api/v1/tasks",
@@ -111,3 +120,33 @@ def test_high_impact_request_creates_pending_ceo_approval(client):
 
     events = client.get("/api/v1/audit-events").json()
     assert any(event["action"] == "approval.requested" for event in events)
+
+
+def test_worker_queue_failure_returns_task_to_retryable_state(client):
+    from unittest.mock import patch
+
+    from app.core.config import Settings, get_settings
+    from app.main import app
+
+    worker_settings = Settings(
+        ai_provider="mock",
+        auth_enabled=False,
+        task_execution_mode="worker",
+    )
+    app.dependency_overrides[get_settings] = lambda: worker_settings
+    task = client.post(
+        "/api/v1/tasks",
+        json={"title": "Queue unavailable", "request": "큐 실패를 안전하게 처리해줘."},
+    ).json()
+    try:
+        with patch("app.worker.execute_task_job.delay", side_effect=ConnectionError):
+            response = client.post(f"/api/v1/tasks/{task['id']}/run")
+        detail = client.get(f"/api/v1/tasks/{task['id']}").json()
+        events = client.get("/api/v1/audit-events").json()
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 503
+    assert detail["status"] == "queued"
+    assert detail["error"] == "Queue dispatch failed: ConnectionError"
+    assert any(event["action"] == "task.dispatch_failed" for event in events)

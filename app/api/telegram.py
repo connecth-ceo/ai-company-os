@@ -15,7 +15,7 @@ router = APIRouter(prefix="/integrations/telegram", tags=["Telegram"])
 
 
 def require_telegram_configuration(settings: Settings) -> None:
-    if not (
+    if not settings.telegram_enabled or not (
         settings.telegram_bot_token
         and settings.telegram_webhook_secret
         and settings.telegram_allowed_chat_id
@@ -65,12 +65,16 @@ async def telegram_webhook(
             "text": summary or "아직 등록된 업무가 없습니다.",
         }
 
-    idempotency_key = f"telegram:{update.get('update_id', '')}"
+    update_id = update.get("update_id")
+    if not isinstance(update_id, int):
+        raise HTTPException(status_code=400, detail="Telegram update_id is required")
+    idempotency_key = f"telegram:{update_id}"
     query = select(Task).where(
         Task.tenant_id == settings.default_tenant_id,
         Task.idempotency_key == idempotency_key,
     )
     task = (await session.scalars(query)).first()
+    should_dispatch = task is None or task.status == TaskStatus.QUEUED
     if task is None:
         title = text.replace("\n", " ")[:60]
         task = Task(
@@ -94,12 +98,44 @@ async def telegram_webhook(
             details={"source": "telegram"},
         )
         await session.commit()
+
+    if should_dispatch:
+        task.status = TaskStatus.DISPATCHED
+        task.error = None
+        await session.commit()
         if settings.task_execution_mode == "worker":
             from app.worker import execute_task_job
 
-            execute_task_job.delay(task.id)
+            try:
+                execute_task_job.delay(task.id)
+            except Exception as exc:
+                task.status = TaskStatus.QUEUED
+                task.error = f"Queue dispatch failed: {type(exc).__name__}"
+                add_audit_event(
+                    session,
+                    tenant_id=task.tenant_id,
+                    actor="system",
+                    action="task.dispatch_failed",
+                    resource_type="task",
+                    resource_id=task.id,
+                    details={"error_type": type(exc).__name__},
+                )
+                await session.commit()
+                raise HTTPException(
+                    status_code=503, detail="Background queue is unavailable"
+                ) from exc
         else:
             background_tasks.add_task(execute_task_with_new_session, task.id, True, False)
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor=f"telegram:{chat_id}",
+            action="task.dispatched",
+            resource_type="task",
+            resource_id=task.id,
+            details={"execution_mode": settings.task_execution_mode},
+        )
+        await session.commit()
 
     return {
         "method": "sendMessage",

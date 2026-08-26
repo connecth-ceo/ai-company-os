@@ -11,7 +11,7 @@ from app.api.routes import router
 from app.api.telegram import router as telegram_router
 from app.core.config import get_settings
 from app.core.logging import RequestLoggingMiddleware, configure_logging
-from app.db import engine, init_db
+from app.db import EXPECTED_DB_REVISION, engine, init_db
 
 
 @asynccontextmanager
@@ -23,7 +23,7 @@ async def lifespan(_: FastAPI):
 
 settings = get_settings()
 configure_logging()
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.4.0", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -49,7 +49,25 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/ready")
-async def ready() -> dict[str, str]:
+async def ready() -> dict[str, str | dict[str, str]]:
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
-    return {"status": "ready"}
+        if not settings.auto_create_schema:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+            if revision != EXPECTED_DB_REVISION:
+                raise RuntimeError(
+                    f"Database schema revision mismatch: expected {EXPECTED_DB_REVISION}"
+                )
+    components = {"database": "ready"}
+    if not settings.auto_create_schema:
+        components["schema"] = EXPECTED_DB_REVISION
+    if settings.task_execution_mode == "worker":
+        from redis.asyncio import Redis
+
+        redis = Redis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)
+        try:
+            await redis.ping()
+            components["redis"] = "ready"
+        finally:
+            await redis.aclose()
+    return {"status": "ready", "components": components}

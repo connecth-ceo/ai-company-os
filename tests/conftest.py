@@ -4,6 +4,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_ai_company.db"
 os.environ["TASK_EXECUTION_MODE"] = "inline"
 os.environ["AI_PROVIDER"] = "mock"
+os.environ["AUTO_CREATE_SCHEMA"] = "true"
 
 import pytest_asyncio
 from fastapi.testclient import TestClient

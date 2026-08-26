@@ -1,6 +1,8 @@
+import logging
 from unittest.mock import AsyncMock, patch
 
 from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
 from app.main import app
 
 
@@ -8,10 +10,20 @@ def test_dashboard_and_readiness(client):
     dashboard = client.get("/")
     assert dashboard.status_code == 200
     assert "AI Company OS" in dashboard.text
+    assert dashboard.headers["X-Content-Type-Options"] == "nosniff"
+    assert dashboard.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'self'" in dashboard.headers["Content-Security-Policy"]
 
     readiness = client.get("/ready")
     assert readiness.status_code == 200
     assert readiness.json()["status"] == "ready"
+
+
+def test_http_client_info_logging_is_suppressed():
+    configure_logging()
+
+    assert logging.getLogger("httpx").level == logging.WARNING
+    assert logging.getLogger("httpcore").level == logging.WARNING
 
 
 def test_idempotency_tenant_isolation_and_audit(client):
@@ -40,8 +52,9 @@ def test_telegram_webhook_secret_and_help(client):
     telegram_settings = Settings(
         ai_provider="mock",
         auth_enabled=False,
+        telegram_enabled=True,
         telegram_bot_token="test-token",
-        telegram_webhook_secret="webhook-secret",
+        telegram_webhook_secret="webhook-secret-123",
         telegram_allowed_chat_id="123",
     )
     app.dependency_overrides[get_settings] = lambda: telegram_settings
@@ -54,7 +67,7 @@ def test_telegram_webhook_secret_and_help(client):
         accepted = client.post(
             "/integrations/telegram/webhook",
             json=update,
-            headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret"},
+            headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret-123"},
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -82,8 +95,9 @@ def test_telegram_message_creates_and_completes_task(client):
         ai_provider="mock",
         auth_enabled=False,
         task_execution_mode="inline",
+        telegram_enabled=True,
         telegram_bot_token="test-token",
-        telegram_webhook_secret="webhook-secret",
+        telegram_webhook_secret="webhook-secret-123",
         telegram_allowed_chat_id="123",
     )
     app.dependency_overrides[get_settings] = lambda: telegram_settings
@@ -99,9 +113,10 @@ def test_telegram_message_creates_and_completes_task(client):
             response = client.post(
                 "/integrations/telegram/webhook",
                 json=update,
-                headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret"},
+                headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret-123"},
             )
             tasks = client.get("/api/v1/tasks").json()
+            events = client.get("/api/v1/audit-events").json()
     finally:
         app.dependency_overrides.pop(get_settings, None)
 
@@ -109,3 +124,63 @@ def test_telegram_message_creates_and_completes_task(client):
     assert tasks[0]["source"] == "telegram"
     assert tasks[0]["status"] == "completed"
     send_mock.assert_awaited_once()
+    assert any(event["action"] == "task.dispatched" for event in events)
+    assert any(event["action"] == "telegram.notification.sent" for event in events)
+
+
+def test_telegram_rejects_missing_update_id(client):
+    telegram_settings = Settings(
+        ai_provider="mock",
+        auth_enabled=False,
+        telegram_enabled=True,
+        telegram_bot_token="test-token",
+        telegram_webhook_secret="webhook-secret-123",
+        telegram_allowed_chat_id="123",
+    )
+    app.dependency_overrides[get_settings] = lambda: telegram_settings
+    try:
+        response = client.post(
+            "/integrations/telegram/webhook",
+            json={"message": {"chat": {"id": 123}, "text": "업무 요청"}},
+            headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret-123"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Telegram update_id is required"
+
+
+def test_telegram_queue_failure_can_be_retried_with_same_update(client):
+    telegram_settings = Settings(
+        ai_provider="mock",
+        auth_enabled=False,
+        task_execution_mode="worker",
+        telegram_enabled=True,
+        telegram_bot_token="test-token",
+        telegram_webhook_secret="webhook-secret-123",
+        telegram_allowed_chat_id="123",
+    )
+    app.dependency_overrides[get_settings] = lambda: telegram_settings
+    update = {
+        "update_id": 12,
+        "message": {"chat": {"id": 123}, "text": "큐 재시도 확인"},
+    }
+    headers = {"X-Telegram-Bot-Api-Secret-Token": "webhook-secret-123"}
+    try:
+        with patch("app.worker.execute_task_job.delay", side_effect=ConnectionError):
+            failed = client.post("/integrations/telegram/webhook", json=update, headers=headers)
+        queued = client.get("/api/v1/tasks").json()[0]
+        with patch("app.worker.execute_task_job.delay") as delay_mock:
+            retried = client.post("/integrations/telegram/webhook", json=update, headers=headers)
+            duplicate = client.post("/integrations/telegram/webhook", json=update, headers=headers)
+        dispatched = client.get("/api/v1/tasks").json()[0]
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert failed.status_code == 503
+    assert queued["status"] == "queued"
+    assert retried.status_code == 200
+    assert duplicate.status_code == 200
+    assert dispatched["status"] == "dispatched"
+    delay_mock.assert_called_once_with(dispatched["id"])

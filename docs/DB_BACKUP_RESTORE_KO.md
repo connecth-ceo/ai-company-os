@@ -16,9 +16,13 @@
 
 ```powershell
 New-Item -ItemType Directory -Path .\backups -Force
-docker compose exec -T db pg_dump -U ai_company -d ai_company -Fc > .\backups\ai_company.dump
+docker compose exec -T db pg_dump -U ai_company -d ai_company -Fc -f /tmp/ai_company.dump
+docker compose cp db:/tmp/ai_company.dump .\backups\ai_company.dump
 Get-Item -LiteralPath .\backups\ai_company.dump
 ```
+
+binary dump를 PowerShell의 `>`로 직접 받지 않는다. Windows PowerShell 버전에 따라 binary stream이
+텍스트로 변환되어 백업이 손상될 수 있기 때문이다.
 
 백업 중 API를 완전히 중지해야 하는 운영 환경이라면 먼저 web/worker 쓰기를 중단하고 실행한다.
 
@@ -28,8 +32,8 @@ Get-Item -LiteralPath .\backups\ai_company.dump
 
 ```powershell
 docker compose exec -T db createdb -U ai_company ai_company_restore_test
-Get-Content -LiteralPath .\backups\ai_company.dump -AsByteStream -Raw |
-  docker compose exec -T db pg_restore -U ai_company -d ai_company_restore_test --clean --if-exists
+docker compose cp .\backups\ai_company.dump db:/tmp/ai_company_restore.dump
+docker compose exec -T db pg_restore -U ai_company -d ai_company_restore_test --clean --if-exists /tmp/ai_company_restore.dump
 docker compose exec -T db psql -U ai_company -d ai_company_restore_test -c "SELECT COUNT(*) FROM tasks;"
 ```
 

@@ -1,0 +1,121 @@
+name: ai-company-os
+
+x-app-environment: &app-environment
+  APP_ENV: production
+  AUTO_CREATE_SCHEMA: "false"
+  TASK_EXECUTION_MODE: worker
+  AUTH_ENABLED: "true"
+  APP_API_KEY: ${APP_API_KEY:?Set APP_API_KEY}
+  DEFAULT_TENANT_ID: owner
+  AI_PROVIDER: openai
+  OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+  OPENAI_TRACING_ENABLED: ${OPENAI_TRACING_ENABLED:-false}
+  OPENAI_STORE_RESPONSES: ${OPENAI_STORE_RESPONSES:-false}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ai_company}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_company}
+  REDIS_URL: redis://redis:6379/0
+  CORS_ORIGINS: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  PUBLIC_BASE_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+  TELEGRAM_ALLOWED_CHAT_ID: ${TELEGRAM_ALLOWED_CHAT_ID:-}
+
+services:
+  api:
+    build:
+      context: ..
+    restart: unless-stopped
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: ..
+    restart: unless-stopped
+    environment: *app-environment
+    command: celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=${CELERY_CONCURRENCY:-2}
+    stop_grace_period: 2m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  migrate:
+    build:
+      context: ..
+    environment: *app-environment
+    command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_company}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_company}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

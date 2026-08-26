@@ -19,6 +19,8 @@
 - CEO Desk에서 회사 기억과 대표 결정을 직접 기록
 - Alembic 데이터베이스 마이그레이션
 - Render용 클라우드 Blueprint
+- Caddy 자동 HTTPS가 포함된 단일 VPS 배포 구성
+- 운영 설정 fail-fast 검증과 DB/Redis/배포 smoke check
 
 ## 가장 빠른 실행
 
@@ -28,10 +30,11 @@ API 키를 `.env`에 설정한 뒤에는 `START_AI_COMPANY_REAL_AI.bat`으로 �
 Docker 전체 구성은 다음 순서입니다.
 
 1. `.env.example`을 `.env`로 복사합니다.
-2. 첫 확인은 `AI_PROVIDER=mock` 그대로 둡니다.
-3. `docker compose up --build`를 실행합니다.
-4. 브라우저에서 `http://localhost:8000`을 열면 CEO Desk가 표시됩니다.
-5. 개발용 API 문서는 `http://localhost:8000/docs`입니다.
+2. `POSTGRES_PASSWORD`를 긴 영문·숫자 임의값으로 바꿉니다. Compose가 DB URL을 같은 값으로 구성합니다.
+3. 첫 확인은 `AI_PROVIDER=mock` 그대로 둡니다.
+4. `docker compose up --build`를 실행합니다.
+5. 브라우저에서 `http://localhost:8000`을 열면 CEO Desk가 표시됩니다.
+6. 개발용 API 문서는 `http://localhost:8000/docs`입니다.
 
 실제 AI 실행은 `.env`의 `AI_PROVIDER=openai`, `OPENAI_API_KEY=...`로 바꾼 뒤
 API와 worker를 다시 시작하면 됩니다. 비밀 키는 저장소에 커밋하지 마세요.
@@ -45,6 +48,10 @@ Docker 없이 개발할 때는 `DATABASE_URL=sqlite+aiosqlite:///./ai_company.db
 V2 리팩터링 전 V0.4 기준선은 [docs/V0_4_BASELINE_KO.md](docs/V0_4_BASELINE_KO.md), 데이터 백업·복구는
 [docs/DB_BACKUP_RESTORE_KO.md](docs/DB_BACKUP_RESTORE_KO.md), 주요 구조 결정은
 [ADR-0001](docs/adr/0001-preserve-v0-control-plane-and-add-runtime-boundaries.md)에 기록되어 있습니다.
+Phase 1의 Runtime·AgentDefinition·Registry 구조는
+[docs/PHASE_1_ABSTRACTIONS_KO.md](docs/PHASE_1_ABSTRACTIONS_KO.md)에 설명되어 있습니다.
+운영화 구현과 검증 결과는
+[docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md](docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md)에 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
