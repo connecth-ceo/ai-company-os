@@ -133,6 +133,8 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 | Telegram 실제 휴대폰 송수신 | 휴대폰 화면에서 `/start` 안내 응답과 `/status`의 `Cloud worker smoke test: completed` 응답 확인 |
 | Telegram 실제 유료 업무 실행 | Telegram 접수 task `965a8642-b837-461e-8fb1-8ada4fbe163a`, Celery `completed`, Reviewer `REWORK`, 결과 저장, 총 27,301 tokens 확인 |
 | 저장 결과 Telegram 재전송 | worker의 stale Telegram 값을 교정·재배포한 뒤 기존 결과를 재사용해 `BOT_OK=True`, `SEND_OK=True`와 휴대폰 결과 표시를 확인; OpenAI 재실행 없음 |
+| 새 업무의 Telegram 자동 완료 회신 | task `92c1047c-4818-4c89-bbac-5e779f2e5a87` 완료 후 `telegram.notification.sent` audit 확인 |
+| 보강 후 클라우드 품질 재검증 | 실제 URL 2개·분량·형식은 충족했으나 유형별 직접 근거 연결 부족으로 Reviewer `REWORK`; 총 25,692 tokens |
 
 기존 로컬 HTTP smoke task ID는 임시 DB의 `8475a314-61ae-4323-9609-4bcce36f7927`였고 정상 완료했다.
 실제 Compose/PostgreSQL/Celery smoke task ID는 `38d996f6-8a73-4697-96fd-9c1c7808349a`였고 정상
@@ -142,7 +144,6 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 
 | 항목 | 상태 | 완료 조건 |
 |---|---|---|
-| 새 업무의 자동 완료 회신 재검증 | 미실행 | 교정된 worker로 새 Telegram 업무 1회를 실행해 `telegram.notification.sent` 확인; 추가 OpenAI 비용 필요 |
 | 보강 후 클라우드 산출물 품질 PASS | 미실행 | Reviewer `REWORK` 원인에 맞춘 prompt/context 보강은 로컬 검증 완료; 배포 후 추가 유료 업무로 재검증 필요 |
 | VPS 실제 배포 | 미실행 | VPS·도메인 준비 후 HTTPS 인증서, 재시작, 백업/복구 확인 |
 
@@ -164,6 +165,7 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 - 실제 Telegram `/start` 및 `/status` 휴대폰 송수신: 완료
 - Telegram을 통한 실제 유료 업무 접수·실행·결과 저장: 완료
 - 저장된 결과의 Telegram 재전송과 휴대폰 표시: 완료
+- 새 Telegram 업무의 자동 완료 회신 audit: 완료
 - 실업무 품질: Reviewer `REWORK` 원인 보강 및 로컬 회귀 테스트 완료; 클라우드 PASS 재검증은 추가
   비용 승인 대기
 - Phase 1+운영화 Git commit: `0293132`, Telegram worker 보강: `487a39c`, Reviewer 근거 보존:

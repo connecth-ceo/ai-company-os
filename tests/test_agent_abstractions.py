@@ -6,6 +6,7 @@ from app.agents.contracts import AgentRunResult, RuntimeUsage
 from app.agents.definitions import AgentDefinition, EvaluationStatus, ModelPolicy
 from app.agents.orchestrator import orchestrate
 from app.agents.outputs import ApprovalRequest, ChiefOutput, ReviewerOutput
+from app.agents.prompts import CHIEF_INSTRUCTIONS, RESEARCH_INSTRUCTIONS, STRATEGY_INSTRUCTIONS
 from app.agents.registry import AgentRegistry, DuplicateAgentError, UnknownAgentError
 from app.agents.runtimes import OpenAIAgentsRuntime
 from app.agents.v04_registry import (
@@ -43,6 +44,16 @@ def test_v04_registry_expresses_existing_team_and_future_boundaries():
     assert chief.output_schema is ChiefOutput
     assert chief.approval_policy == "propose_side_effects_for_ceo"
     assert reviewer.output_schema is ReviewerOutput
+
+
+def test_prompts_require_segment_specific_evidence():
+    compact_chief = " ".join(CHIEF_INSTRUCTIONS.lower().split())
+    assert "every type-and-problem pairing" in RESEARCH_INSTRUCTIONS
+    assert "broad survey" in RESEARCH_INSTRUCTIONS
+    assert "more specific segment" in RESEARCH_INSTRUCTIONS
+    assert "segment-specific evidence" in STRATEGY_INSTRUCTIONS
+    assert "generic source plus a hypothesis label" in compact_chief
+    assert "does not satisfy a request" in compact_chief
 
 
 def test_registry_rejects_duplicates_and_missing_agents():
