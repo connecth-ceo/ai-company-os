@@ -48,6 +48,7 @@ jobs:
           OPENAI_API_KEY: ci-only-openai-key
           POSTGRES_PASSWORD: ci-only-database-password
         run: |
+          cp .env.example .env
           docker compose --env-file .env.example config -q
           docker compose --env-file deploy/.env.vps.example -f deploy/compose.vps.yml config -q
       - name: Validate Caddy HTTPS configuration
@@ -70,7 +71,9 @@ jobs:
       - name: Install smoke client
         run: python -m pip install httpx
       - name: Start PostgreSQL, Redis, API, and Celery
-        run: docker compose --env-file .env.example up -d --build
+        run: |
+          cp .env.example .env
+          docker compose --env-file .env.example up -d --build
       - name: Run end-to-end worker task
         env:
           APP_API_KEY: replace-with-at-least-32-random-characters
