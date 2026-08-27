@@ -1,6 +1,6 @@
 # AI Company OS 운영화 단계 완료 보고서
 
-- 기준일: 2026-08-26 (Asia/Seoul)
+- 기준일: 2026-08-27 (Asia/Seoul)
 - 기준선: V0.4 제어 흐름 + Phase 1 AgentRuntime/AgentDefinition/Registry
 - Phase 2 Hermes: 시작하지 않음
 - 목적: 실제 OpenAI, PostgreSQL/Redis/Celery, Telegram, Docker/VPS 운영을 위한 코드와 검증 경로 완성
@@ -13,8 +13,9 @@ Telegram webhook/회신 경계, Docker/Render/VPS 배포 정의와 smoke 도구�
 
 현재 컴퓨터에서 Docker Desktop/WSL 2를 구성하고 PostgreSQL, Redis, migration, API, Celery worker와
 mock 업무 E2E를 실제 Compose 스택으로 검증했다. 실제 OpenAI 프로젝트 키로 유료 오케스트레이션도
-검증했다. Telegram 자격증명과 공개 HTTPS 배포 환경이 필요한 검증은 완료로 표시하지 않는다. 이 보고서는
-"구현됨"과 "실환경에서 검증됨"을 구분한다.
+검증했다. 이어서 GitHub private repository와 Render Blueprint를 연결해 공개 HTTPS API, PostgreSQL,
+Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업무와 Telegram webhook 수신까지
+검증했다. 이 보고서는 "구현됨"과 "실환경에서 검증됨"을 구분한다.
 
 ## 1. 보존한 기존 경계
 
@@ -75,6 +76,11 @@ mock 업무 E2E를 실제 Compose 스택으로 검증했다. 실제 OpenAI 프�
 - Telegram HTTP 오류에서 bot token이 예외·로그에 노출되지 않도록 정규화
 - httpx/httpcore INFO 로그를 억제해 URL path에 포함되는 Telegram bot token의 성공 요청 로그 노출 방지
 - webhook 설정 도구가 bot identity, webhook URL, 최근 Telegram 오류를 확인
+- Reviewer `REWORK` 수정 단계에 원 CEO 요청, Research brief, Strategy brief를 다시 전달해 Chief가
+  출처 URL과 원래 제약을 복원할 근거를 유지
+- Chief가 분량·형식·출처 수·인용 방식과 literal http/https URL을 보존하고, 근거 없는 주장을 가설로
+  표시하도록 강화
+- Reviewer가 CEO의 명시 요구사항과 직접 URL·주장별 근거 연결을 PASS 전에 검사하도록 강화
 
 ### 클라우드/VPS 배포
 
@@ -120,6 +126,12 @@ mock 업무 E2E를 실제 Compose 스택으로 검증했다. 실제 OpenAI 프�
 | 실제 OpenAI 네트워크 오케스트레이션 | `gpt-5.6-luna`, Research/Strategy/Chief/Reviewer 실행, 출처 URL·최종 보고서·32,774 tokens 확인 |
 | 실제 Reviewer 통제 경계 | 유료 smoke에서 `REWORK` 판정 반환 확인; 추가 비용 재실행은 하지 않음 |
 | OpenAI 설정 Compose 재구성 | `Configuration: valid (development, openai)`, API/DB/Redis healthy, Celery `pong`, integration `SUCCESS` 확인 |
+| Render 실제 배포 | web/worker `live`, 공개 `/ready` 200, DB schema `12738dc9272a`, Redis ready 확인 |
+| Render 실제 OpenAI 업무 | Celery worker 처리, Reviewer `PASS`, Knowledge 1건, AuditEvent 4건, 총 7,258 tokens 확인 |
+| Telegram 실제 webhook 수신 | 실제 bot `/start` update가 Render webhook에 전달되어 pending 1→0, webhook URL 일치, 직접 `/status` callback HTTP 200 확인 |
+| Telegram 실제 휴대폰 송수신 | 휴대폰 화면에서 `/start` 안내 응답과 `/status`의 `Cloud worker smoke test: completed` 응답 확인 |
+| Telegram 실제 유료 업무 실행 | Telegram 접수 task `965a8642-b837-461e-8fb1-8ada4fbe163a`, Celery `completed`, Reviewer `REWORK`, 결과 저장, 총 27,301 tokens 확인 |
+| 저장 결과 Telegram 재전송 | worker의 stale Telegram 값을 교정·재배포한 뒤 기존 결과를 재사용해 `BOT_OK=True`, `SEND_OK=True`와 휴대폰 결과 표시를 확인; OpenAI 재실행 없음 |
 
 기존 로컬 HTTP smoke task ID는 임시 DB의 `8475a314-61ae-4323-9609-4bcce36f7927`였고 정상 완료했다.
 실제 Compose/PostgreSQL/Celery smoke task ID는 `38d996f6-8a73-4697-96fd-9c1c7808349a`였고 정상
@@ -129,19 +141,19 @@ mock 업무 E2E를 실제 Compose 스택으로 검증했다. 실제 OpenAI 프�
 
 | 항목 | 상태 | 완료 조건 |
 |---|---|---|
-| Telegram 실제 송수신 | 미실행 | bot token/chat ID/HTTPS URL 설정 후 휴대폰 메시지 접수 및 완료 회신 확인 |
-| Render 실제 배포 | 미실행 | GitHub/Render 연결 및 비용 승인 후 공개 `/ready`와 worker 로그 확인 |
+| 새 업무의 자동 완료 회신 재검증 | 미실행 | 교정된 worker로 새 Telegram 업무 1회를 실행해 `telegram.notification.sent` 확인; 추가 OpenAI 비용 필요 |
+| 보강 후 클라우드 산출물 품질 PASS | 미실행 | Reviewer `REWORK` 원인에 맞춘 prompt/context 보강은 로컬 검증 완료; 배포 후 추가 유료 업무로 재검증 필요 |
 | VPS 실제 배포 | 미실행 | VPS·도메인 준비 후 HTTPS 인증서, 재시작, 백업/복구 확인 |
 | 격리 Python wheel build | sandbox network 차단으로 hatchling build env 다운로드 불가 | 온라인 CI의 wheel build 단계 통과 확인 |
-| Phase 1+운영화 Git commit | 미생성 | Codex 환경의 `.git` 쓰기 제한 해제 후 검토·commit; 모든 작업 파일은 보존됨 |
+| 현재 Telegram Blueprint 보강 commit | 미생성 | 변경 검토 후 commit 및 push |
 
 ## 5. 다음 실가동 순서
 
-1. Docker 서비스를 새 OpenAI 설정으로 재구성한다.
-2. Render 또는 VPS 중 하나를 선택해 HTTPS로 배포한다.
-3. Telegram 자격증명을 입력하고 `TELEGRAM_ENABLED=true`로 전환한다.
-4. 휴대폰에서 실제 업무를 보내 최종 E2E를 확인한다.
-5. 외부 검증이 통과한 뒤에만 Phase 2 Hermes 파일럿을 시작한다.
+1. 현재 Telegram Blueprint 보강 변경을 commit/push하고 기존 비밀값을 보존하며 Blueprint를 동기화한다.
+2. 보강 코드를 배포한 뒤 추가 비용 승인 시 새 Telegram 업무 1회로 품질 PASS와 자동 완료 회신
+   audit을 함께 재검증한다.
+3. 백업·비용 알림·키 교체 절차를 점검한다.
+4. 운영화 검증 완료 뒤에만 Phase 2 Hermes 파일럿을 시작한다.
 
 ## 종료 상태
 
@@ -150,6 +162,11 @@ mock 업무 E2E를 실제 Compose 스택으로 검증했다. 실제 OpenAI 프�
 - 운영화 코드·테스트·문서·배포 경로: 완료
 - 자격증명 없는 로컬 및 Docker 통합 검증: 완료
 - 실제 OpenAI 네트워크 검증: 완료
-- 실제 Telegram/클라우드 실검증: 외부 환경 대기
-- Phase 1+운영화 별도 Git commit: 미생성, working tree에 보존
+- 실제 Render 클라우드 실검증: 완료
+- 실제 Telegram `/start` 및 `/status` 휴대폰 송수신: 완료
+- Telegram을 통한 실제 유료 업무 접수·실행·결과 저장: 완료
+- 저장된 결과의 Telegram 재전송과 휴대폰 표시: 완료
+- 실업무 품질: Reviewer `REWORK` 원인 보강 및 로컬 회귀 테스트 완료; 클라우드 PASS 재검증은 추가
+  비용 승인 대기
+- Phase 1+운영화 Git commit: `0293132`, Telegram worker 보강 commit: `487a39c`
 - Phase 2 Hermes: 시작하지 않음

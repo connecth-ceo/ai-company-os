@@ -129,6 +129,7 @@ class ScriptedRuntime:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.inputs: list[tuple[str, str]] = []
         self.active = 0
         self.max_active = 0
         self.chief_calls = 0
@@ -136,6 +137,7 @@ class ScriptedRuntime:
 
     async def run(self, definition, input_text):
         self.calls.append(definition.key)
+        self.inputs.append((definition.key, input_text))
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         await asyncio.sleep(0)
@@ -203,3 +205,9 @@ async def test_fixed_orchestrator_uses_runtime_boundary_and_preserves_rework():
     assert result.output_tokens == 12
     assert result.total_tokens == 18
     assert result.company_context_used is True
+    chief_inputs = [text for key, text in runtime.inputs if key == CHIEF_AGENT_KEY]
+    assert len(chief_inputs) == 2
+    assert "CEO REQUEST:\ntest request" in chief_inputs[1]
+    assert "RESEARCH BRIEF:\nresearch result" in chief_inputs[1]
+    assert "STRATEGY BRIEF:\nstrategy result" in chief_inputs[1]
+    assert "REVIEW FEEDBACK:\nrevise" in chief_inputs[1]

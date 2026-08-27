@@ -139,6 +139,10 @@ PUBLIC_BASE_URL=https://배포된_서비스_주소
 Webhook secret은 16~256자의 영문 대소문자, 숫자, `_`, `-`만 사용한다. 서버는 Telegram이 보내는
 `X-Telegram-Bot-Api-Secret-Token` 헤더와 이 값을 고정 시간 비교한다.
 
+Render의 일반 자동 생성값에는 `+`, `/`, `=` 같은 문자가 포함될 수 있어 Telegram이 거절할 수 있다.
+따라서 `TELEGRAM_WEBHOOK_SECRET`은 Blueprint의 `sync: false` 입력란에 직접 넣고, 위 허용 문자만
+포함하는 값을 사용한다. API와 worker는 같은 값을 공유해야 한다.
+
 ### 6.4 Webhook 등록
 
 환경 변수가 들어간 컴퓨터에서 다음을 실행한다.
@@ -172,17 +176,21 @@ Render가 코드를 가져가려면 온라인 Git 저장소가 필요하다.
 2. `New` → `Blueprint`를 선택한다.
 3. GitHub를 연결하고 위 private repository를 선택한다.
 4. Render가 `render.yaml`을 읽어 4개 리소스(API, worker, DB, queue)를 보여주는지 확인한다.
-5. `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID` 입력란을 채운다. Telegram을
+5. `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID`,
+   `TELEGRAM_WEBHOOK_SECRET`, `PUBLIC_BASE_URL`, `TELEGRAM_ENABLED` 입력란을 채운다. Telegram을
    나중에 쓸 경우 빈 값으로 둘 수 있는지 화면에서 확인하고, 허용하지 않으면 임시 생성 후 서비스의
    Environment 화면에서 추가한다.
 6. 예상 비용을 확인한 뒤 Apply 한다.
 7. 배포 완료 후 web service URL을 열고 `/ready`가 `{"status":"ready"}`인지 확인한다.
 8. web service의 Environment 탭에서 자동 생성된 `APP_API_KEY`를 확인해 CEO Desk 설정에 넣는다.
-9. `PUBLIC_BASE_URL`을 배포 URL로 추가하고 Telegram webhook을 등록한다.
+9. `PUBLIC_BASE_URL`이 실제 배포 URL인지 확인하고 Telegram webhook을 등록한다.
 10. Telegram을 실제 사용할 때만 `TELEGRAM_ENABLED=true`로 바꾼다. 그 전에는 `false`를 유지한다.
 
 Render는 `sync: false`로 선언된 secret을 최초 Blueprint 생성 중 입력받고, DB/queue 연결 주소는
 Blueprint가 자동 연결한다. `/ready`는 실제 DB 연결까지 확인하므로 배포 health check로 사용된다.
+Web 서비스의 Telegram 값을 Blueprint 생성 후 수동으로 바꾸면 worker의 `fromService` 참조가 즉시
+재주입되지 않을 수 있다. 이 경우 worker Environment에도 같은 값을 저장하고 재배포하거나, 값을 보존한
+상태에서 Blueprint를 다시 동기화한 뒤 worker의 `BOT_OK`, 허용 chat ID, 활성값을 확인한다.
 
 ## 9. 단일 VPS에 배포
 
