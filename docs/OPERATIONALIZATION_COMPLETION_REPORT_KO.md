@@ -127,6 +127,7 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 | 실제 Reviewer 통제 경계 | 유료 smoke에서 `REWORK` 판정 반환 확인; 추가 비용 재실행은 하지 않음 |
 | OpenAI 설정 Compose 재구성 | `Configuration: valid (development, openai)`, API/DB/Redis healthy, Celery `pong`, integration `SUCCESS` 확인 |
 | Render 실제 배포 | web/worker `live`, 공개 `/ready` 200, DB schema `12738dc9272a`, Redis ready 확인 |
+| GitHub CI 및 자동 배포 | commit `c403ae2`에서 verify·Compose integration 전체 성공, Render web/worker 자동 배포 `live` 확인 |
 | Render 실제 OpenAI 업무 | Celery worker 처리, Reviewer `PASS`, Knowledge 1건, AuditEvent 4건, 총 7,258 tokens 확인 |
 | Telegram 실제 webhook 수신 | 실제 bot `/start` update가 Render webhook에 전달되어 pending 1→0, webhook URL 일치, 직접 `/status` callback HTTP 200 확인 |
 | Telegram 실제 휴대폰 송수신 | 휴대폰 화면에서 `/start` 안내 응답과 `/status`의 `Cloud worker smoke test: completed` 응답 확인 |
@@ -144,16 +145,13 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 | 새 업무의 자동 완료 회신 재검증 | 미실행 | 교정된 worker로 새 Telegram 업무 1회를 실행해 `telegram.notification.sent` 확인; 추가 OpenAI 비용 필요 |
 | 보강 후 클라우드 산출물 품질 PASS | 미실행 | Reviewer `REWORK` 원인에 맞춘 prompt/context 보강은 로컬 검증 완료; 배포 후 추가 유료 업무로 재검증 필요 |
 | VPS 실제 배포 | 미실행 | VPS·도메인 준비 후 HTTPS 인증서, 재시작, 백업/복구 확인 |
-| 격리 Python wheel build | sandbox network 차단으로 hatchling build env 다운로드 불가 | 온라인 CI의 wheel build 단계 통과 확인 |
-| 현재 Telegram Blueprint 보강 commit | 미생성 | 변경 검토 후 commit 및 push |
 
 ## 5. 다음 실가동 순서
 
-1. 현재 Telegram Blueprint 보강 변경을 commit/push하고 기존 비밀값을 보존하며 Blueprint를 동기화한다.
-2. 보강 코드를 배포한 뒤 추가 비용 승인 시 새 Telegram 업무 1회로 품질 PASS와 자동 완료 회신
+1. 추가 비용 승인 시 새 Telegram 업무 1회로 품질 PASS와 자동 완료 회신
    audit을 함께 재검증한다.
-3. 백업·비용 알림·키 교체 절차를 점검한다.
-4. 운영화 검증 완료 뒤에만 Phase 2 Hermes 파일럿을 시작한다.
+2. 백업·비용 알림·키 교체 절차를 점검한다.
+3. 운영화 검증 완료 뒤에만 Phase 2 Hermes 파일럿을 시작한다.
 
 ## 종료 상태
 
@@ -168,5 +166,6 @@ Redis 호환 queue, Celery worker를 배포했고 실제 클라우드 OpenAI 업
 - 저장된 결과의 Telegram 재전송과 휴대폰 표시: 완료
 - 실업무 품질: Reviewer `REWORK` 원인 보강 및 로컬 회귀 테스트 완료; 클라우드 PASS 재검증은 추가
   비용 승인 대기
-- Phase 1+운영화 Git commit: `0293132`, Telegram worker 보강 commit: `487a39c`
+- Phase 1+운영화 Git commit: `0293132`, Telegram worker 보강: `487a39c`, Reviewer 근거 보존:
+  `8fe4a98`, CI/자동 배포 복구: `c403ae2`
 - Phase 2 Hermes: 시작하지 않음
