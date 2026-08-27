@@ -77,6 +77,53 @@ def test_telegram_webhook_secret_and_help(client):
     assert accepted.json()["method"] == "sendMessage"
 
 
+def test_telegram_briefing_and_specialist_commands(client):
+    telegram_settings = Settings(
+        ai_provider="mock",
+        auth_enabled=False,
+        task_execution_mode="inline",
+        telegram_enabled=True,
+        telegram_bot_token="test-token",
+        telegram_webhook_secret="webhook-secret-123",
+        telegram_allowed_chat_id="123",
+    )
+    app.dependency_overrides[get_settings] = lambda: telegram_settings
+    headers = {"X-Telegram-Bot-Api-Secret-Token": "webhook-secret-123"}
+    try:
+        briefing = client.post(
+            "/integrations/telegram/webhook",
+            json={"update_id": 20, "message": {"chat": {"id": 123}, "text": "/briefing"}},
+            headers=headers,
+        )
+        missing_request = client.post(
+            "/integrations/telegram/webhook",
+            json={"update_id": 21, "message": {"chat": {"id": 123}, "text": "/marketing"}},
+            headers=headers,
+        )
+        with patch(
+            "app.services.telegram.send_telegram_message",
+            new=AsyncMock(return_value=True),
+        ):
+            marketing = client.post(
+                "/integrations/telegram/webhook",
+                json={
+                    "update_id": 22,
+                    "message": {"chat": {"id": 123}, "text": "/marketing 제품 소개문"},
+                },
+                headers=headers,
+            )
+            task = client.get("/api/v1/tasks").json()[0]
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert briefing.status_code == 200
+    assert "데일리 브리핑" in briefing.json()["text"]
+    assert "명령 뒤에" in missing_request.json()["text"]
+    assert marketing.status_code == 200
+    assert task["status"] == "completed"
+    assert task["request"].startswith("/marketing")
+
+
 def test_api_key_authentication(client):
     protected_settings = Settings(ai_provider="mock", auth_enabled=True, app_api_key="secret")
     app.dependency_overrides[get_settings] = lambda: protected_settings

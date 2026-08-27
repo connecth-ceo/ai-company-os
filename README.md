@@ -7,6 +7,8 @@
 
 - FastAPI 업무 API와 자동 문서 (`/docs`)
 - Chief of Staff, Research, Strategy, Reviewer 실행 흐름
+- 명시적 Telegram 명령으로 호출하는 Marketing 초안 및 Legal Risk Review 전문 에이전트
+- OpenAI 비용 없이 현재 업무·승인 상태를 요약하는 Telegram 데일리 브리핑
 - PostgreSQL 기반 업무·기억·의사결정·지식·승인 영속화
 - Celery/Redis 백그라운드 작업
 - OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
@@ -52,6 +54,8 @@ Phase 1의 Runtime·AgentDefinition·Registry 구조는
 [docs/PHASE_1_ABSTRACTIONS_KO.md](docs/PHASE_1_ABSTRACTIONS_KO.md)에 설명되어 있습니다.
 운영화 구현과 검증 결과는
 [docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md](docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md)에 있습니다.
+전문 기능의 사용법과 안전 경계는
+[docs/SPECIALIST_FEATURES_KO.md](docs/SPECIALIST_FEATURES_KO.md)에 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
@@ -63,3 +67,11 @@ Phase 1의 Runtime·AgentDefinition·Registry 구조는
 
 V0.4의 승인은 대표 결정을 안전하게 기록하는 단계입니다. 승인 버튼을 눌러도 실제 이메일 발송,
 결제, 삭제 또는 배포를 자동 실행하지 않습니다. 승인 후 도구 실행은 V1에서 권한 정책과 함께 연결합니다.
+
+## Telegram 전문 기능
+
+- `/briefing`: 최근 24시간의 완료·진행·실패 업무와 승인 대기 건을 즉시 요약합니다. AI 호출 비용이 없습니다.
+- `/marketing <요청>`: 조사·전략 결과를 바탕으로 마케팅 초안을 만듭니다. 외부 게시나 광고 집행은 하지 않습니다.
+- `/legal <요청>`: 예비 법률·규제 위험을 정리합니다. 법률 자문이나 최종 법적 결론이 아닙니다.
+
+일반 문장은 기존 V0.4 흐름으로 처리되며, 전문 에이전트는 위 명령을 명시했을 때만 추가됩니다.

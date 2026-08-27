@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.db import get_session
 from app.models import Task, TaskStatus
 from app.services.audit import add_audit_event
+from app.services.daily_briefing import build_daily_briefing
 from app.services.task_service import execute_task_with_new_session
 
 router = APIRouter(prefix="/integrations/telegram", tags=["Telegram"])
@@ -47,7 +48,31 @@ async def telegram_webhook(
         return {
             "method": "sendMessage",
             "chat_id": chat_id,
-            "text": "업무 내용을 자연어로 보내주세요. /status 로 최근 업무를 확인할 수 있습니다.",
+            "text": (
+                "업무 내용을 자연어로 보내주세요.\n"
+                "/status 최근 업무\n"
+                "/briefing 데일리 브리핑\n"
+                "/marketing <요청> 마케팅 초안\n"
+                "/legal <요청> 예비 법률 위험검토"
+            ),
+        }
+
+    if text in {"/briefing", "/브리핑"}:
+        return {
+            "method": "sendMessage",
+            "chat_id": chat_id,
+            "text": await build_daily_briefing(
+                session,
+                settings.default_tenant_id,
+            ),
+        }
+
+    bare_specialist_commands = {"/marketing", "/마케팅", "/legal", "/법률"}
+    if text.lower() in bare_specialist_commands:
+        return {
+            "method": "sendMessage",
+            "chat_id": chat_id,
+            "text": "명령 뒤에 검토할 내용을 입력해 주세요. 예: /marketing 신제품 소개문 초안",
         }
 
     if text == "/status":
