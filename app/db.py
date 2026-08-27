@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import get_settings
 from app.models import Base
 
-EXPECTED_DB_REVISION = "12738dc9272a"
+EXPECTED_DB_REVISION = "5f42d0b8a1c3"
 
 settings = get_settings()
 engine = create_async_engine(settings.database_url, pool_pre_ping=True)

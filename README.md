@@ -56,6 +56,9 @@ Phase 1의 Runtime·AgentDefinition·Registry 구조는
 [docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md](docs/OPERATIONALIZATION_COMPLETION_REPORT_KO.md)에 있습니다.
 전문 기능의 사용법과 안전 경계는
 [docs/SPECIALIST_FEATURES_KO.md](docs/SPECIALIST_FEATURES_KO.md)에 있습니다.
+JARVIS형 확장 분석은 [JARVIS_AI_COMPANY_OS_GAP_ANALYSIS.md](JARVIS_AI_COMPANY_OS_GAP_ANALYSIS.md),
+Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT_TASK_HIERARCHY_KO.md)에
+설명되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

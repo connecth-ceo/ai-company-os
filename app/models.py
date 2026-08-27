@@ -3,7 +3,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -45,9 +55,27 @@ class TimestampMixin:
     )
 
 
+class Project(Base, TimestampMixin):
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+
+    tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+
+
 class Task(Base, TimestampMixin):
     __tablename__ = "tasks"
-    __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        CheckConstraint(
+            "parent_task_id IS NULL OR parent_task_id <> id",
+            name="ck_task_not_self_parent",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
     tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
@@ -60,9 +88,22 @@ class Task(Base, TimestampMixin):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(40), default="api")
     external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    parent_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
 
     runs: Mapped[list["TaskRun"]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
+    )
+    project: Mapped[Project | None] = relationship(back_populates="tasks")
+    parent: Mapped["Task | None"] = relationship(
+        back_populates="children", remote_side="Task.id", foreign_keys=[parent_task_id]
+    )
+    children: Mapped[list["Task"]] = relationship(
+        back_populates="parent", foreign_keys=[parent_task_id]
     )
 
 

@@ -15,6 +15,7 @@ from app.models import (
     Decision,
     KnowledgeItem,
     Memory,
+    Project,
     Task,
 )
 from app.schemas import (
@@ -29,6 +30,8 @@ from app.schemas import (
     KnowledgeRead,
     MemoryCreate,
     MemoryRead,
+    ProjectCreate,
+    ProjectRead,
     TaskCreate,
     TaskDetail,
     TaskRead,
@@ -47,6 +50,60 @@ async def require_task(session: AsyncSession, task_id: str, tenant_id: str) -> T
     return task
 
 
+async def require_project(session: AsyncSession, project_id: str, tenant_id: str) -> Project:
+    query = select(Project).where(Project.id == project_id, Project.tenant_id == tenant_id)
+    project = (await session.scalars(query)).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    payload: ProjectCreate,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Project:
+    project = Project(tenant_id=context.tenant_id, **payload.model_dump())
+    session.add(project)
+    await session.flush()
+    add_audit_event(
+        session,
+        tenant_id=context.tenant_id,
+        actor=context.actor,
+        action="project.created",
+        resource_type="project",
+        resource_id=project.id,
+    )
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+@router.get("/projects", response_model=list[ProjectRead])
+async def list_projects(
+    limit: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[Project]:
+    query = (
+        select(Project)
+        .where(Project.tenant_id == context.tenant_id)
+        .order_by(Project.created_at.desc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/projects/{project_id}", response_model=ProjectRead)
+async def get_project(
+    project_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Project:
+    return await require_project(session, project_id, context.tenant_id)
+
+
 @router.post("/tasks", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(
     payload: TaskCreate,
@@ -61,6 +118,20 @@ async def create_task(
         existing = (await session.scalars(query)).first()
         if existing:
             return existing
+    if payload.project_id:
+        await require_project(session, payload.project_id, context.tenant_id)
+    if payload.parent_task_id:
+        parent = await require_task(session, payload.parent_task_id, context.tenant_id)
+        if payload.project_id and parent.project_id != payload.project_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Parent task must belong to the same project",
+            )
+        if not payload.project_id and parent.project_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Child task must specify its parent project",
+            )
     task = Task(tenant_id=context.tenant_id, **payload.model_dump())
     session.add(task)
     await session.flush()
@@ -71,6 +142,7 @@ async def create_task(
         action="task.created",
         resource_type="task",
         resource_id=task.id,
+        details={"project_id": task.project_id, "parent_task_id": task.parent_task_id},
     )
     await session.commit()
     await session.refresh(task)

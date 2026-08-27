@@ -9,11 +9,32 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProjectCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=240)
+    description: str | None = Field(default=None, max_length=50_000)
+    status: str = Field(
+        default="active",
+        pattern="^(planned|active|on_hold|completed|archived)$",
+    )
+
+
+class ProjectRead(ORMModel):
+    id: str
+    tenant_id: str
+    title: str
+    description: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     request: str = Field(min_length=1, max_length=50_000)
     priority: int = Field(default=3, ge=1, le=5)
     idempotency_key: str | None = Field(default=None, max_length=100)
+    project_id: str | None = Field(default=None, max_length=36)
+    parent_task_id: str | None = Field(default=None, max_length=36)
 
 
 class TaskRead(ORMModel):
@@ -26,6 +47,8 @@ class TaskRead(ORMModel):
     result: str | None
     error: str | None
     source: str
+    project_id: str | None
+    parent_task_id: str | None
     created_at: datetime
     updated_at: datetime
 
