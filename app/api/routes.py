@@ -32,6 +32,8 @@ from app.schemas import (
     DelegatedTaskCreate,
     DelegationDispatchResponse,
     DelegationRead,
+    DelegationRecoveryRequest,
+    DelegationRecoveryResponse,
     DispatchResponse,
     KnowledgeCreate,
     KnowledgeRead,
@@ -52,6 +54,7 @@ from app.services.delegation_execution import (
     dispatch_delegation,
     execute_delegation_with_new_session,
 )
+from app.services.delegation_recovery import recover_stale_delegations
 from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
@@ -285,6 +288,23 @@ async def get_delegation(
     if delegation is None:
         raise HTTPException(status_code=404, detail="Delegation not found")
     return delegation
+
+
+@router.post("/delegations/recover-stale", response_model=DelegationRecoveryResponse)
+async def recover_stale_delegation_runs(
+    payload: DelegationRecoveryRequest,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> dict[str, object]:
+    return await recover_stale_delegations(
+        session,
+        settings=settings,
+        tenant_id=context.tenant_id,
+        actor=context.actor,
+        dry_run=payload.dry_run,
+        limit=payload.limit,
+    )
 
 
 @router.post(

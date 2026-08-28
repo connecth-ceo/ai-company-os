@@ -36,6 +36,10 @@ services:
         value: "1.0"
       - key: DELEGATION_APPROVAL_ROLES
         value: legal_review
+      - key: DELEGATION_DISPATCH_STALE_SECONDS
+        value: "300"
+      - key: DELEGATION_RECOVERY_GRACE_SECONDS
+        value: "120"
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -100,6 +104,16 @@ services:
           type: web
           name: ai-company-os
           envVarKey: DELEGATION_APPROVAL_ROLES
+      - key: DELEGATION_DISPATCH_STALE_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: DELEGATION_DISPATCH_STALE_SECONDS
+      - key: DELEGATION_RECOVERY_GRACE_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: DELEGATION_RECOVERY_GRACE_SECONDS
       - key: OPENAI_API_KEY
         fromService:
           type: web

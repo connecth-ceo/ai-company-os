@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     delegation_max_cost_usd: float = Field(default=5.0, gt=0, le=1_000)
     delegation_approval_cost_threshold_usd: float = Field(default=1.0, gt=0, le=1_000)
     delegation_approval_roles: str = "legal_review"
+    delegation_dispatch_stale_seconds: int = Field(default=300, ge=60, le=86_400)
+    delegation_recovery_grace_seconds: int = Field(default=120, ge=30, le=3_600)
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"

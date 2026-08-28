@@ -152,6 +152,27 @@ class DelegationDispatchResponse(BaseModel):
     execution_mode: str
 
 
+class DelegationRecoveryRequest(BaseModel):
+    dry_run: bool = True
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class DelegationRecoveryItem(BaseModel):
+    delegation_id: str
+    child_task_id: str
+    previous_status: str
+    action: str
+
+
+class DelegationRecoveryResponse(BaseModel):
+    dry_run: bool
+    scanned: int
+    stale: int
+    reset_for_retry: int
+    quarantined: int
+    items: list[DelegationRecoveryItem]
+
+
 class DispatchResponse(BaseModel):
     task_id: str
     status: TaskStatus

@@ -103,3 +103,17 @@ def test_delegation_approval_policy_configuration_is_validated():
         )
     with pytest.raises(ValidationError, match="comma-separated"):
         production_settings(delegation_approval_roles="legal-review")
+
+
+def test_delegation_recovery_windows_are_bounded():
+    settings = production_settings(
+        delegation_dispatch_stale_seconds=600,
+        delegation_recovery_grace_seconds=180,
+    )
+    assert settings.delegation_dispatch_stale_seconds == 600
+    assert settings.delegation_recovery_grace_seconds == 180
+
+    with pytest.raises(ValidationError):
+        production_settings(delegation_dispatch_stale_seconds=30)
+    with pytest.raises(ValidationError):
+        production_settings(delegation_recovery_grace_seconds=10)
