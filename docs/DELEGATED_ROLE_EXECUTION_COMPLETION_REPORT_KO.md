@@ -31,25 +31,34 @@
 | 실행 후 토큰 초과 fail-closed | 통과 |
 | SQLite migration | 빈 DB에서 head, downgrade, 재-upgrade 통과 |
 | PostgreSQL offline DDL | 열, FK RESTRICT, unique index, revision SQL 생성 확인 |
+| GitHub Actions CI | commit `a759cbc`, 성공 |
+| Render migration | `d4e6a8b0c2f4 → e6f8a0c2d4b6`, 완료 |
+| Render Web/Worker | 동일 commit `a759cbc` Live, `/ready` 200 및 Celery ready 확인 |
+| 운영 위임 E2E | parent → Legal Review 위임 → worker 단일 역할 실행 → completed |
+| 실제 OpenAI 런타임 | `openai_agents`, `gpt-5.6-luna`, 1회 실행 성공 |
+| 실제 사용량 원장 | input 1,554 / output 306 / total 1,860 tokens, 7,485 ms |
+| 단일 역할 경계 | Child TaskRun 1건, `Legal Risk Review Agent`, WorkflowRun 미생성 확인 |
 
-이 검증은 `AI_PROVIDER=mock`이며 OpenAI 요청과 비용을 발생시키지 않았다.
+로컬 자동검사는 `AI_PROVIDER=mock`으로 비용 없이 수행했다. 이후 사용자가 명시적으로 승인한 운영 smoke
+1건에서 실제 OpenAI 요청과 테스트 데이터 생성을 수행했다. 생성된 식별자는 다음과 같다.
+
+- Parent Task: `dab2a9c5-0698-487e-a39a-bb261e5fe203`
+- Delegation: `6caa671c-7ebb-41f2-8bdc-63a1e7731747`
+- Child Task: `66d7e407-926c-4ec1-8aae-bd7ad64e543a`
+
+검사 도구는 `APP_API_KEY`를 Windows clipboard에서 메모리로만 읽고 종료 시 clipboard와 변수에서
+제거한다. 키와 실제 결과 본문은 로그나 완료 보고서에 기록하지 않는다.
 
 ## 아직 운영 환경에서 검증하지 않은 것
 
-- GitHub Actions에서 이번 commit의 CI 완료.
-- Render PostgreSQL `d4e6a8b0c2f4 → e6f8a0c2d4b6` 실제 migration.
-- Render Web/Worker가 동일 commit으로 Live인지와 `/ready` 응답.
-- 운영 API에서 위임 생성 → worker dispatch → 단일 역할 완료의 1회 E2E.
-- 실제 OpenAI 응답의 토큰 원장과 timeout 동작.
+- timeout을 실제로 발생시켰을 때 worker 중단과 실패 원장이 일치하는지 확인.
+- OpenAI 제공자 청구 데이터와 내부 USD 비용 원장의 연결.
+- worker가 실행 도중 강제 종료된 경우의 중복 비용 방지·수동 복구 검증.
 
-마지막 항목은 OpenAI 비용을 발생시키므로 별도 사용자 승인을 받은 1회 smoke에서만 실행한다. 실제 USD
-청구액 원장은 아직 제공자 청구 데이터와 연결하지 않았으므로 `cost_budget_usd`는 허용 예약 상한이다.
+실제 USD 청구액 원장은 아직 제공자 청구 데이터와 연결하지 않았으므로 `cost_budget_usd`는 허용 예약
+상한이다. 이번 성공은 비용 상한·토큰 원장·단일 실행 경계를 확인했지만 실제 청구액 대조를 의미하지 않는다.
 
 ## 배포 후 확인 순서
 
-1. GitHub CI 성공을 확인한다.
-2. Render migration log에서 head `e6f8a0c2d4b6`을 확인한다.
-3. Web과 Worker가 같은 commit으로 Live인지 확인한다.
-4. `/ready`의 DB/Redis/schema 상태를 확인한다.
-5. 비용 승인 뒤 작은 토큰 예산으로 위임 1건만 실행한다.
-6. Delegation/TaskRun 토큰·시간·상태와 감사 이벤트를 대조한다.
+위 여섯 항목은 모두 완료했다. 다음 운영 단계에서는 자동 재시도 없이 실패 복구 절차, 실제 제공자 비용
+대조, CEO 승인함과 연결된 위임 정책을 추가한다.
