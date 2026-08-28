@@ -18,7 +18,7 @@ from app.agents.v04_registry import (
 )
 from app.core.config import Settings
 from app.db import SessionLocal
-from app.models import Approval, ReviewVerdict, Task, TaskStatus
+from app.models import Approval, Commitment, ReviewVerdict, Task, TaskStatus
 from app.services.daily_briefing import build_daily_briefing
 
 
@@ -138,6 +138,15 @@ async def test_daily_briefing_is_read_only_database_summary():
                     action="외부 게시",
                     reason="대표 승인 필요",
                 ),
+                Commitment(
+                    tenant_id="owner",
+                    statement="고객에게 후속 연락",
+                    owner_type="person",
+                    owner_id="CEO",
+                    due_at=datetime(2026, 8, 26, 23, 0, tzinfo=UTC),
+                    status="open",
+                    source_type="manual",
+                ),
             )
         )
         await session.commit()
@@ -152,4 +161,6 @@ async def test_daily_briefing_is_read_only_database_summary():
     assert "완료 1건" in briefing
     assert "진행/대기 1건" in briefing
     assert "승인 대기 1건" in briefing
+    assert "약속 지연 1건" in briefing
+    assert "고객에게 후속 연락" in briefing
     assert "완료 업무" in briefing

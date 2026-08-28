@@ -5,6 +5,7 @@ const state = {
   approvals: [],
   memories: [],
   decisions: [],
+  commitments: [],
   knowledge: [],
 };
 
@@ -46,6 +47,10 @@ const decisionStatusLabels = {
   proposed: "검토 중", active: "활성", superseded: "대체됨", expired: "만료", revoked: "철회",
 };
 
+const commitmentStatusLabels = {
+  open: "대기", in_progress: "진행 중", completed: "완료", cancelled: "취소",
+};
+
 function renderTasks() {
   if (!state.tasks.length) {
     $("#task-list").innerHTML = '<p class="empty">첫 업무를 지시해 보세요.</p>';
@@ -85,8 +90,35 @@ function renderApprovals() {
 function renderMetrics() {
   $("#metric-active").textContent = state.tasks.filter((task) => ["queued", "dispatched", "running"].includes(task.status)).length;
   $("#metric-completed").textContent = state.tasks.filter((task) => task.status === "completed").length;
+  $("#metric-overdue").textContent = state.commitments.filter((item) => item.is_overdue).length;
   const tokens = state.tasks.reduce((sum, task) => sum + (task.runs?.reduce((runSum, run) => runSum + run.total_tokens, 0) || 0), 0);
   $("#metric-tokens").textContent = new Intl.NumberFormat("ko-KR").format(tokens);
+}
+
+function renderCommitments() {
+  const items = state.commitments.filter((item) => !["completed", "cancelled"].includes(item.status));
+  if (!items.length) {
+    $("#commitment-list").innerHTML = '<p class="empty">진행 중인 약속이 없습니다.</p>';
+    return;
+  }
+  $("#commitment-list").innerHTML = items.slice(0, 8).map((item) => `
+    <article class="commitment-item ${item.is_overdue ? "overdue" : ""}">
+      <div>
+        <div class="task-meta">
+          <span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(commitmentStatusLabels[item.status] || item.status)}</span>
+          ${item.is_overdue ? '<span class="overdue-label">기한 초과</span>' : ""}
+          <span>${new Date(item.due_at).toLocaleString("ko-KR")}까지</span>
+        </div>
+        <strong>${escapeHtml(item.statement)}</strong>
+        <p>${escapeHtml(item.owner_id)} · ${escapeHtml(item.owner_type)}</p>
+      </div>
+      <div class="commitment-actions">
+        ${item.status === "open" ? `<button data-commitment-id="${item.id}" data-commitment-status="in_progress">시작</button>` : ""}
+        <button class="approve" data-commitment-id="${item.id}" data-commitment-status="completed">완료</button>
+        <button class="danger" data-commitment-id="${item.id}" data-commitment-status="cancelled">취소</button>
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderCompanyContext() {
@@ -112,16 +144,18 @@ function renderCompanyContext() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, knowledge] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, knowledge] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
-      api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/knowledge"),
+      api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
+      api("/api/v1/knowledge"),
     ]);
     state.tasks = await Promise.all(tasks.map((task) => api(`/api/v1/tasks/${task.id}`)));
     state.approvals = approvals;
     state.memories = memories;
     state.decisions = decisions;
+    state.commitments = commitments;
     state.knowledge = knowledge;
-    renderTasks(); renderApprovals(); renderMetrics(); renderCompanyContext();
+    renderTasks(); renderApprovals(); renderMetrics(); renderCommitments(); renderCompanyContext();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
@@ -163,6 +197,15 @@ $("#approval-list").addEventListener("click", async (event) => {
 });
 
 $("#refresh-button").addEventListener("click", loadDashboard);
+$("#add-commitment-button").addEventListener("click", () => {
+  const availableDecisions = state.decisions.filter((item) => ["proposed", "active"].includes(item.status));
+  $("#commitment-decision-id").innerHTML = '<option value="">연결하지 않음</option>'
+    + availableDecisions.map((item) => `<option value="${item.id}">${escapeHtml(item.subject)}</option>`).join("");
+  const due = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  due.setMinutes(due.getMinutes() - due.getTimezoneOffset());
+  $("#commitment-due-at").value = due.toISOString().slice(0, 16);
+  $("#commitment-dialog").showModal();
+});
 $("#add-memory-button").addEventListener("click", () => $("#memory-dialog").showModal());
 $("#add-decision-button").addEventListener("click", () => {
   const activeCompanyDecisions = state.decisions.filter(
@@ -225,6 +268,47 @@ $("#decision-list").addEventListener("click", async (event) => {
       method: "POST",
       body: JSON.stringify({
         status: button.dataset.decisionStatus,
+        note: "CEO Desk에서 변경",
+      }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+  }
+});
+
+$("#commitment-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("#commitment-status").textContent = "저장 중입니다…";
+  try {
+    const decisionId = $("#commitment-decision-id").value;
+    await api("/api/v1/commitments", { method: "POST", body: JSON.stringify({
+      statement: $("#commitment-statement").value.trim(),
+      owner_type: $("#commitment-owner-type").value,
+      owner_id: $("#commitment-owner-id").value.trim(),
+      due_at: new Date($("#commitment-due-at").value).toISOString(),
+      decision_id: decisionId || null,
+      source_type: decisionId ? "decision" : "manual",
+      provenance: { channel: "ceo_desk" },
+    }) });
+    $("#commitment-form").reset();
+    $("#commitment-owner-id").value = "CEO";
+    $("#commitment-status").textContent = "";
+    $("#commitment-dialog").close();
+    await loadDashboard();
+  } catch (error) { $("#commitment-status").textContent = error.message; }
+});
+
+$("#commitment-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-commitment-status]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/commitments/${button.dataset.commitmentId}/transition`, {
+      method: "POST",
+      body: JSON.stringify({
+        status: button.dataset.commitmentStatus,
         note: "CEO Desk에서 변경",
       }),
     });

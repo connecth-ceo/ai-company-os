@@ -4,6 +4,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import (
     ApprovalStatus,
+    CommitmentOwnerType,
+    CommitmentSourceType,
+    CommitmentStatus,
     DecisionScope,
     DecisionStatus,
     ReviewVerdict,
@@ -274,6 +277,47 @@ class DecisionRead(ORMModel):
 
 class DecisionTransition(BaseModel):
     status: DecisionStatus
+    note: str | None = Field(default=None, max_length=2_000)
+
+
+class CommitmentCreate(BaseModel):
+    statement: str = Field(min_length=1, max_length=50_000)
+    owner_type: CommitmentOwnerType = CommitmentOwnerType.PERSON
+    owner_id: str = Field(min_length=1, max_length=100)
+    due_at: datetime
+    status: CommitmentStatus = CommitmentStatus.OPEN
+    source_type: CommitmentSourceType = CommitmentSourceType.MANUAL
+    source_id: str | None = Field(default=None, max_length=120)
+    provenance: dict[str, str] = Field(default_factory=dict)
+    project_id: str | None = Field(default=None, max_length=36)
+    task_id: str | None = Field(default=None, max_length=36)
+    decision_id: str | None = Field(default=None, max_length=36)
+    reminder_policy: dict[str, str] = Field(default_factory=dict)
+
+
+class CommitmentRead(ORMModel):
+    id: str
+    tenant_id: str
+    statement: str
+    owner_type: CommitmentOwnerType
+    owner_id: str
+    due_at: datetime
+    status: CommitmentStatus
+    source_type: CommitmentSourceType
+    source_id: str | None
+    provenance: dict[str, str]
+    project_id: str | None
+    task_id: str | None
+    decision_id: str | None
+    reminder_policy: dict[str, str]
+    completed_at: datetime | None
+    is_overdue: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommitmentTransition(BaseModel):
+    status: CommitmentStatus
     note: str | None = Field(default=None, max_length=2_000)
 
 

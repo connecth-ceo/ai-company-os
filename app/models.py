@@ -61,6 +61,27 @@ class DecisionScope(StrEnum):
     DEPARTMENT = "department"
 
 
+class CommitmentStatus(StrEnum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class CommitmentOwnerType(StrEnum):
+    PERSON = "person"
+    AGENT = "agent"
+    TEAM = "team"
+
+
+class CommitmentSourceType(StrEnum):
+    MANUAL = "manual"
+    DECISION = "decision"
+    TASK = "task"
+    MEETING = "meeting"
+    EXTERNAL = "external"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -353,6 +374,69 @@ class Decision(Base, TimestampMixin):
         remote_side="Decision.id",
         foreign_keys=[supersedes_decision_id],
     )
+
+
+class Commitment(Base, TimestampMixin):
+    __tablename__ = "commitments"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'in_progress', 'completed', 'cancelled')",
+            name="ck_commitment_status",
+        ),
+        CheckConstraint(
+            "owner_type IN ('person', 'agent', 'team')",
+            name="ck_commitment_owner_type",
+        ),
+        CheckConstraint(
+            "source_type IN ('manual', 'decision', 'task', 'meeting', 'external')",
+            name="ck_commitment_source_type",
+        ),
+        CheckConstraint(
+            "(status = 'completed' AND completed_at IS NOT NULL) OR "
+            "(status <> 'completed' AND completed_at IS NULL)",
+            name="ck_commitment_completion_consistency",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    statement: Mapped[str] = mapped_column(Text)
+    owner_type: Mapped[CommitmentOwnerType] = mapped_column(String(40), index=True)
+    owner_id: Mapped[str] = mapped_column(String(100), index=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[CommitmentStatus] = mapped_column(
+        String(40), default=CommitmentStatus.OPEN, index=True
+    )
+    source_type: Mapped[CommitmentSourceType] = mapped_column(
+        String(40), default=CommitmentSourceType.MANUAL, index=True
+    )
+    source_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provenance: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    decision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("decisions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    reminder_policy: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @property
+    def is_overdue(self) -> bool:
+        if CommitmentStatus(self.status) not in {
+            CommitmentStatus.OPEN,
+            CommitmentStatus.IN_PROGRESS,
+        }:
+            return False
+        due_at = self.due_at
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=UTC)
+        return due_at.astimezone(UTC) < datetime.now(UTC)
 
 
 class KnowledgeItem(Base, TimestampMixin):

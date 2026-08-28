@@ -39,7 +39,7 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .command-card button, .primary-button { border: 0; background: var(--forest); color: white; padding: 13px 18px; border-radius: 11px; font-weight: 750; }
 .command-card button span { color: var(--lime); margin-left: 10px; }
 .form-status { min-height: 18px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
 .metrics article { border-top: 2px solid var(--forest); padding: 18px 4px; }
 .metrics span { font-size: 13px; color: var(--muted); }
 .metrics strong { display: block; font: 500 32px Georgia, serif; margin-top: 7px; }
@@ -64,6 +64,17 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .approval-actions button { flex: 1; border: 1px solid var(--forest); border-radius: 8px; padding: 9px; background: transparent; color: var(--forest); font-weight: 700; }
 .approval-actions .approve { background: var(--forest); color: white; }
 .activity-panel { margin-top: 18px; box-shadow: none; }
+.commitment-panel { margin-top: 18px; }
+.commitment-list { display: grid; gap: 10px; }
+.commitment-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid var(--line); border-left: 4px solid var(--lime); border-radius: 12px; padding: 14px 16px; }
+.commitment-item.overdue { border-left-color: var(--orange); background: #fff9f3; }
+.commitment-item strong { display: block; margin-top: 8px; }
+.commitment-item p { color: var(--muted); font-size: 12px; margin: 5px 0 0; }
+.overdue-label { color: #8a3821; font-weight: 800; }
+.commitment-actions { display: flex; gap: 7px; flex-shrink: 0; }
+.commitment-actions button { border: 1px solid var(--forest); border-radius: 8px; padding: 7px 10px; background: transparent; color: var(--forest); font-weight: 700; }
+.commitment-actions .approve { background: var(--forest); color: white; }
+.commitment-actions .danger { border-color: var(--line); color: #8a3821; }
 .context-panel { margin-top: 18px; }
 .panel-actions { display: flex; align-items: center; gap: 10px; }
 .compact-button { border: 0; padding: 9px 13px; font-size: 13px; }
@@ -100,6 +111,7 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .hero, .workspace-grid { grid-template-columns: 1fr; }
   .hero { gap: 30px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
+  .commitment-item { align-items: flex-start; flex-direction: column; }
   .activity-list, .context-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 520px) {

@@ -44,6 +44,7 @@
         <article><span>진행 중</span><strong id="metric-active">0</strong></article>
         <article><span>완료</span><strong id="metric-completed">0</strong></article>
         <article><span>승인 대기</span><strong id="metric-approvals">0</strong></article>
+        <article><span>기한 초과 약속</span><strong id="metric-overdue">0</strong></article>
         <article><span>총 토큰</span><strong id="metric-tokens">0</strong></article>
       </section>
 
@@ -63,6 +64,15 @@
           <p class="panel-note">현재 승인은 의사결정으로 기록되며, 실제 발송·결제·삭제·배포는 자동 실행하지 않습니다.</p>
           <div id="approval-list"><p class="empty">승인 요청이 없습니다.</p></div>
         </aside>
+      </section>
+
+      <section class="panel commitment-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">COMMITMENTS</p><h2>약속·후속조치</h2></div>
+          <button class="primary-button compact-button" id="add-commitment-button">새 약속 기록</button>
+        </div>
+        <p class="panel-note">담당자와 마감일을 기록합니다. 기한 초과는 자동 판별하며, 외부 연락이나 실행은 자동으로 하지 않습니다.</p>
+        <div id="commitment-list" class="commitment-list"><p class="empty">등록된 약속이 없습니다.</p></div>
       </section>
 
       <section class="panel context-panel">
@@ -148,6 +158,27 @@
         <p class="panel-note">기존 결정을 대체하면 새 결정이 활성화되고 이전 결정은 이력으로 보존됩니다.</p>
         <p class="form-status" id="decision-status" aria-live="polite"></p>
         <button class="primary-button" type="submit">결정 저장</button>
+      </form>
+    </dialog>
+    <dialog id="commitment-dialog">
+      <form id="commitment-form">
+        <div class="panel-heading"><h2>새 약속·후속조치</h2><button type="button" class="close-button" data-close-dialog="commitment-dialog" aria-label="닫기">×</button></div>
+        <label for="commitment-statement">약속 내용</label>
+        <textarea id="commitment-statement" rows="3" required placeholder="예: 금요일까지 고객 인터뷰 일정을 확정한다."></textarea>
+        <label for="commitment-owner-type">담당 유형</label>
+        <select id="commitment-owner-type">
+          <option value="person">사람</option>
+          <option value="agent">AI 직원</option>
+          <option value="team">팀</option>
+        </select>
+        <label for="commitment-owner-id">담당자 또는 팀</label>
+        <input id="commitment-owner-id" required maxlength="100" value="CEO" placeholder="예: CEO, Research Agent, 마케팅팀" />
+        <label for="commitment-due-at">마감일</label>
+        <input id="commitment-due-at" type="datetime-local" required />
+        <label for="commitment-decision-id">관련 대표 결정 (선택)</label>
+        <select id="commitment-decision-id"><option value="">연결하지 않음</option></select>
+        <p class="form-status" id="commitment-status" aria-live="polite"></p>
+        <button class="primary-button" type="submit">약속 저장</button>
       </form>
     </dialog>
     <button class="settings-button" id="settings-button" aria-label="연결 설정">설정</button>

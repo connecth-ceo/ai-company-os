@@ -13,6 +13,8 @@ from app.models import (
     Approval,
     ApprovalStatus,
     AuditEvent,
+    Commitment,
+    CommitmentStatus,
     Decision,
     DecisionScope,
     DecisionStatus,
@@ -32,6 +34,9 @@ from app.schemas import (
     ApprovalDecision,
     ApprovalRead,
     AuditEventRead,
+    CommitmentCreate,
+    CommitmentRead,
+    CommitmentTransition,
     DecisionCreate,
     DecisionRead,
     DecisionTransition,
@@ -53,7 +58,7 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
-from app.services import decision_memory
+from app.services import commitments, decision_memory
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -132,7 +137,32 @@ async def require_decision(
     return item
 
 
+async def require_commitment(
+    session: AsyncSession,
+    commitment_id: str,
+    tenant_id: str,
+) -> Commitment:
+    query = select(Commitment).where(
+        Commitment.id == commitment_id,
+        Commitment.tenant_id == tenant_id,
+    )
+    item = (await session.scalars(query)).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Commitment not found")
+    return item
+
+
 def decision_rejection(error: decision_memory.DecisionLifecycleRejected) -> HTTPException:
+    status_code = 404 if error.code.endswith("_not_found") else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
+def commitment_rejection(
+    error: commitments.CommitmentLifecycleRejected,
+) -> HTTPException:
     status_code = 404 if error.code.endswith("_not_found") else 409
     return HTTPException(
         status_code=status_code,
@@ -659,6 +689,108 @@ async def transition_decision(
         )
     except decision_memory.DecisionLifecycleRejected as error:
         raise decision_rejection(error) from error
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
+@router.post("/commitments", response_model=CommitmentRead, status_code=201)
+async def create_commitment(
+    payload: CommitmentCreate,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Commitment:
+    try:
+        item = await commitments.create_commitment(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except commitments.CommitmentLifecycleRejected as error:
+        raise commitment_rejection(error) from error
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
+@router.get("/commitments", response_model=list[CommitmentRead])
+async def list_commitments(
+    commitment_status: CommitmentStatus | None = Query(default=None, alias="status"),
+    owner_id: str | None = Query(default=None, max_length=100),
+    project_id: str | None = Query(default=None, max_length=36),
+    task_id: str | None = Query(default=None, max_length=36),
+    decision_id: str | None = Query(default=None, max_length=36),
+    due_before: datetime | None = Query(default=None),
+    due_after: datetime | None = Query(default=None),
+    overdue_only: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[Commitment]:
+    conditions = [Commitment.tenant_id == context.tenant_id]
+    if commitment_status is not None:
+        conditions.append(Commitment.status == commitment_status)
+    if owner_id is not None:
+        conditions.append(Commitment.owner_id == owner_id)
+    if project_id is not None:
+        conditions.append(Commitment.project_id == project_id)
+    if task_id is not None:
+        conditions.append(Commitment.task_id == task_id)
+    if decision_id is not None:
+        conditions.append(Commitment.decision_id == decision_id)
+    if due_before is not None:
+        conditions.append(Commitment.due_at <= commitments.as_utc(due_before))
+    if due_after is not None:
+        conditions.append(Commitment.due_at >= commitments.as_utc(due_after))
+    if overdue_only:
+        conditions.extend(
+            [
+                Commitment.status.in_(
+                    [CommitmentStatus.OPEN, CommitmentStatus.IN_PROGRESS]
+                ),
+                Commitment.due_at < datetime.now(UTC),
+            ]
+        )
+    query = (
+        select(Commitment)
+        .where(*conditions)
+        .order_by(Commitment.due_at.asc(), Commitment.created_at.asc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/commitments/{commitment_id}", response_model=CommitmentRead)
+async def get_commitment(
+    commitment_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Commitment:
+    return await require_commitment(session, commitment_id, context.tenant_id)
+
+
+@router.post(
+    "/commitments/{commitment_id}/transition",
+    response_model=CommitmentRead,
+)
+async def transition_commitment(
+    commitment_id: str,
+    payload: CommitmentTransition,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Commitment:
+    item = await require_commitment(session, commitment_id, context.tenant_id)
+    try:
+        await commitments.transition_commitment(
+            session,
+            item=item,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except commitments.CommitmentLifecycleRejected as error:
+        raise commitment_rejection(error) from error
     await session.commit()
     await session.refresh(item)
     return item
