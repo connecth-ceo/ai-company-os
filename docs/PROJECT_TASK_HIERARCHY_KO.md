@@ -92,5 +92,6 @@ Content-Type: application/json
 - Project 수정·삭제 UI.
 - Task 관계 변경 API.
 
-후속 개발 단위인 **Workflow Recording Layer**는 완료됐다. 다음 단계는 이 관계와 실행 기록을 기반으로
-위임 깊이·개수·순환을 제한하는 **Delegation Guardrails**다.
+후속 개발 단위인 **Workflow Recording Layer**와 **Delegation Guardrails**가 완료됐다. 위임은 기존
+Task 관계를 사용하되 Orchestrator가 역할·예산·깊이·개수·순환·회사/프로젝트 경계를 먼저 검사한 뒤
+하위 Task를 생성한다. 자세한 계약은 [DELEGATION_GUARDRAILS_KO.md](DELEGATION_GUARDRAILS_KO.md)에 있다.

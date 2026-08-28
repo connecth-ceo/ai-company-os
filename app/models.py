@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -172,6 +173,32 @@ class WorkflowRun(Base, TimestampMixin):
 
     definition: Mapped[WorkflowDefinition] = relationship(back_populates="runs")
     task_run: Mapped[TaskRun] = relationship(back_populates="workflow_run")
+
+
+class Delegation(Base, TimestampMixin):
+    __tablename__ = "delegations"
+    __table_args__ = (UniqueConstraint("child_task_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    parent_task_id: Mapped[str] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), index=True
+    )
+    child_task_id: Mapped[str] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), index=True
+    )
+    initiator: Mapped[str] = mapped_column(String(100))
+    delegated_role: Mapped[str] = mapped_column(String(100), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    depth: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(40), default="created", index=True)
+    token_budget: Mapped[int] = mapped_column(Integer)
+    timeout_seconds: Mapped[int] = mapped_column(Integer)
+    cost_budget_usd: Mapped[float] = mapped_column(Numeric(10, 4))
+    policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
 class Memory(Base, TimestampMixin):

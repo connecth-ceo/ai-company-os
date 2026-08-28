@@ -13,6 +13,7 @@ from app.models import (
     ApprovalStatus,
     AuditEvent,
     Decision,
+    Delegation,
     KnowledgeItem,
     Memory,
     Project,
@@ -28,6 +29,8 @@ from app.schemas import (
     AuditEventRead,
     DecisionCreate,
     DecisionRead,
+    DelegatedTaskCreate,
+    DelegationRead,
     DispatchResponse,
     KnowledgeCreate,
     KnowledgeRead,
@@ -42,6 +45,7 @@ from app.schemas import (
     WorkflowRunRead,
 )
 from app.services.audit import add_audit_event
+from app.services.delegation import DelegationRejected, create_delegation
 from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
@@ -169,6 +173,79 @@ async def list_tasks(
     )
     result = await session.scalars(query)
     return list(result)
+
+
+@router.post(
+    "/tasks/{task_id}/delegations",
+    response_model=DelegationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def delegate_task(
+    task_id: str,
+    payload: DelegatedTaskCreate,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Delegation:
+    parent = await require_task(session, task_id, context.tenant_id)
+    try:
+        delegation, child = await create_delegation(
+            session,
+            parent=parent,
+            payload=payload,
+            settings=settings,
+            initiator=context.actor,
+        )
+    except DelegationRejected as exc:
+        add_audit_event(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            action="task.delegation_rejected",
+            resource_type="task",
+            resource_id=parent.id,
+            details={"code": exc.code, "delegated_role": payload.delegated_role},
+        )
+        await session.commit()
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
+    add_audit_event(
+        session,
+        tenant_id=context.tenant_id,
+        actor=context.actor,
+        action="task.delegated",
+        resource_type="delegation",
+        resource_id=delegation.id,
+        details={
+            "parent_task_id": parent.id,
+            "child_task_id": child.id,
+            "project_id": parent.project_id,
+            "initiator": context.actor,
+            "reason": payload.reason,
+            "delegated_role": payload.delegated_role,
+            "depth": delegation.depth,
+        },
+    )
+    await session.commit()
+    await session.refresh(delegation)
+    return delegation
+
+
+@router.get("/tasks/{task_id}/delegations", response_model=list[DelegationRead])
+async def list_task_delegations(
+    task_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[Delegation]:
+    await require_task(session, task_id, context.tenant_id)
+    query = (
+        select(Delegation)
+        .where(
+            Delegation.tenant_id == context.tenant_id,
+            Delegation.parent_task_id == task_id,
+        )
+        .order_by(Delegation.created_at.asc())
+    )
+    return list(await session.scalars(query))
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)

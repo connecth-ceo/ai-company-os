@@ -85,11 +85,11 @@ WorkflowRun이 없어도 정상적으로 조회되므로 기존 데이터와 하
   왕복 및 기존 Task 보존 검증.
 - PostgreSQL offline DDL에서 두 테이블, 세 정의 seed, FK 생성 검증.
 
-배포 환경에서 추가로 확인할 항목:
+배포 환경에서 확인한 항목:
 
 - Render PostgreSQL에 revision `8c2e4f6a9b10` 적용.
-- 배포 후 mock 또는 승인된 실제 Task 1회의 WorkflowRun 조회.
-- Web/worker 새 이미지와 Telegram 기존 명령 회귀.
+- Web/worker commit `45cce9e` 배포와 `/ready 200`, Celery Redis 연결 확인.
+- Telegram `/briefing` 회귀 확인.
 
-다음 개발 단위는 이 기록 계층을 기반으로 Subtask 위임의 깊이·개수·순환·tenant/project 경계를
-결정론적으로 제한하는 **Delegation Guardrails**다.
+이 기록 계층을 기반으로 한 다음 개발 단위 **Delegation Guardrails**도 구현됐다. 자세한 계약은
+[DELEGATION_GUARDRAILS_KO.md](DELEGATION_GUARDRAILS_KO.md)에 있다.

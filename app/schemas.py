@@ -104,6 +104,35 @@ class TaskDetail(TaskRead):
     runs: list[TaskRunRead] = []
 
 
+class DelegatedTaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=240)
+    request: str = Field(min_length=1, max_length=50_000)
+    priority: int = Field(default=3, ge=1, le=5)
+    delegated_role: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=100)
+    reason: str = Field(min_length=1, max_length=2_000)
+    token_budget: int = Field(default=10_000, ge=1)
+    timeout_seconds: int = Field(default=600, ge=30)
+    cost_budget_usd: float = Field(default=1.0, gt=0)
+
+
+class DelegationRead(ORMModel):
+    id: str
+    tenant_id: str
+    project_id: str | None
+    parent_task_id: str
+    child_task_id: str
+    initiator: str
+    delegated_role: str
+    reason: str
+    depth: int
+    status: str
+    token_budget: int
+    timeout_seconds: int
+    cost_budget_usd: float
+    policy_snapshot: dict
+    created_at: datetime
+
+
 class DispatchResponse(BaseModel):
     task_id: str
     status: TaskStatus

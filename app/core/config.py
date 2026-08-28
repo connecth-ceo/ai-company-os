@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     review_max_reworks: int = Field(default=1, ge=0, le=3)
     task_max_attempts: int = Field(default=3, ge=1, le=10)
     task_timeout_seconds: int = Field(default=600, ge=30, le=3600)
+    delegation_max_depth: int = Field(default=3, ge=1, le=10)
+    delegation_max_children: int = Field(default=5, ge=1, le=50)
+    delegation_max_token_budget: int = Field(default=50_000, ge=1, le=1_000_000)
+    delegation_max_timeout_seconds: int = Field(default=900, ge=30, le=3600)
+    delegation_max_cost_usd: float = Field(default=5.0, gt=0, le=1_000)
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"
