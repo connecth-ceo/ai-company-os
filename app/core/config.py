@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     delegation_approval_roles: str = "legal_review"
     delegation_dispatch_stale_seconds: int = Field(default=300, ge=60, le=86_400)
     delegation_recovery_grace_seconds: int = Field(default=120, ge=30, le=3_600)
+    attention_task_stale_seconds: int = Field(default=1_200, ge=60, le=86_400)
+    attention_commitment_decision_hours: int = Field(default=24, ge=1, le=720)
+    attention_commitment_critical_hours: int = Field(default=72, ge=2, le=2_160)
+    attention_approval_critical_hours: int = Field(default=72, ge=1, le=2_160)
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"
@@ -63,6 +67,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> "Settings":
+        if (
+            self.attention_commitment_critical_hours
+            <= self.attention_commitment_decision_hours
+        ):
+            raise ValueError(
+                "ATTENTION_COMMITMENT_CRITICAL_HOURS must exceed "
+                "ATTENTION_COMMITMENT_DECISION_HOURS"
+            )
         if self.delegation_approval_cost_threshold_usd > self.delegation_max_cost_usd:
             raise ValueError(
                 "DELEGATION_APPROVAL_COST_THRESHOLD_USD cannot exceed DELEGATION_MAX_COST_USD"

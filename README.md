@@ -22,6 +22,7 @@
 - 저장된 회사 기억·대표 결정·지식을 다음 AI 업무에 자동 반영
 - 대표 결정의 제안·활성·철회·만료·대체 이력과 적용 범위 관리
 - 담당자·마감일·출처·관련 결정이 있는 약속/후속조치와 기한 초과 추적
+- 지연 약속·장기 실행·업무 실패·승인 적체를 비용 없이 정렬하는 대표 주의 큐
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
 - 민감 역할·고비용 AI 위임을 대표 승인 전 실행하지 않는 승인 게이트
 - Worker 정체 위임의 dry-run 진단, 안전 복구, 비용 중복 방지 격리
@@ -87,6 +88,9 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 구현·검증 완료 범위와 운영 확인 항목은
 [docs/COMMITMENT_TRACKING_COMPLETION_REPORT_KO.md](docs/COMMITMENT_TRACKING_COMPLETION_REPORT_KO.md)에
 구분해 기록했습니다.
+대표가 지금 확인할 예외를 규칙으로 계산하는 방법은
+[docs/ATTENTION_QUEUE_KO.md](docs/ATTENTION_QUEUE_KO.md), 구현·검증 상태는
+[docs/ATTENTION_QUEUE_COMPLETION_REPORT_KO.md](docs/ATTENTION_QUEUE_COMPLETION_REPORT_KO.md)에 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

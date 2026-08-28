@@ -12,6 +12,8 @@ from app.models import (
     AICostLedgerEntry,
     Approval,
     ApprovalStatus,
+    AttentionKind,
+    AttentionLevel,
     AuditEvent,
     Commitment,
     CommitmentStatus,
@@ -33,6 +35,7 @@ from app.schemas import (
     ApprovalCreate,
     ApprovalDecision,
     ApprovalRead,
+    AttentionQueueRead,
     AuditEventRead,
     CommitmentCreate,
     CommitmentRead,
@@ -58,7 +61,7 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
-from app.services import commitments, decision_memory
+from app.services import attention, commitments, decision_memory
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -75,6 +78,28 @@ from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/attention", response_model=AttentionQueueRead)
+async def get_attention_queue(
+    minimum_level: AttentionLevel = Query(
+        default=AttentionLevel.INFO,
+        alias="min_level",
+    ),
+    kind: AttentionKind | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> AttentionQueueRead:
+    return await attention.build_attention_queue(
+        session,
+        context.tenant_id,
+        settings=settings,
+        minimum_level=minimum_level,
+        kind=kind,
+        limit=limit,
+    )
 
 
 @router.get("/ai-costs/current-month", response_model=AICostSummaryRead)

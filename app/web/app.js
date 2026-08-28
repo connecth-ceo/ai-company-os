@@ -6,6 +6,7 @@ const state = {
   memories: [],
   decisions: [],
   commitments: [],
+  attention: { total: 0, counts: {}, items: [] },
   knowledge: [],
 };
 
@@ -51,6 +52,17 @@ const commitmentStatusLabels = {
   open: "대기", in_progress: "진행 중", completed: "완료", cancelled: "취소",
 };
 
+const attentionLevelLabels = {
+  info: "정보", watch: "관찰", action: "행동", decision: "결정", critical: "긴급",
+};
+
+const attentionKindLabels = {
+  overdue_commitment: "지연 약속",
+  long_running_task: "장기 실행",
+  task_failure: "업무 실패",
+  pending_approval: "승인 대기",
+};
+
 function renderTasks() {
   if (!state.tasks.length) {
     $("#task-list").innerHTML = '<p class="empty">첫 업무를 지시해 보세요.</p>';
@@ -91,8 +103,28 @@ function renderMetrics() {
   $("#metric-active").textContent = state.tasks.filter((task) => ["queued", "dispatched", "running"].includes(task.status)).length;
   $("#metric-completed").textContent = state.tasks.filter((task) => task.status === "completed").length;
   $("#metric-overdue").textContent = state.commitments.filter((item) => item.is_overdue).length;
+  $("#metric-attention").textContent = (state.attention.counts.decision || 0) + (state.attention.counts.critical || 0);
   const tokens = state.tasks.reduce((sum, task) => sum + (task.runs?.reduce((runSum, run) => runSum + run.total_tokens, 0) || 0), 0);
   $("#metric-tokens").textContent = new Intl.NumberFormat("ko-KR").format(tokens);
+}
+
+function renderAttention() {
+  const items = state.attention.items || [];
+  if (!items.length) {
+    $("#attention-list").innerHTML = '<p class="empty">현재 대표가 확인할 주의 항목이 없습니다.</p>';
+    return;
+  }
+  $("#attention-list").innerHTML = items.slice(0, 8).map((item) => `
+    <article class="attention-item level-${escapeHtml(item.level)}">
+      <div class="attention-heading">
+        <span class="attention-level">${escapeHtml(attentionLevelLabels[item.level] || item.level)}</span>
+        <span class="attention-kind">${escapeHtml(attentionKindLabels[item.kind] || item.kind)}</span>
+      </div>
+      <strong>${escapeHtml(item.title)}</strong>
+      <p>${escapeHtml(item.summary)}</p>
+      <small>${escapeHtml(item.recommendation)}</small>
+    </article>
+  `).join("");
 }
 
 function renderCommitments() {
@@ -144,9 +176,10 @@ function renderCompanyContext() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, knowledge] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, knowledge] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
+      api("/api/v1/attention?limit=8"),
       api("/api/v1/knowledge"),
     ]);
     state.tasks = await Promise.all(tasks.map((task) => api(`/api/v1/tasks/${task.id}`)));
@@ -154,8 +187,9 @@ async function loadDashboard() {
     state.memories = memories;
     state.decisions = decisions;
     state.commitments = commitments;
+    state.attention = attention;
     state.knowledge = knowledge;
-    renderTasks(); renderApprovals(); renderMetrics(); renderCommitments(); renderCompanyContext();
+    renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderCommitments(); renderCompanyContext();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';

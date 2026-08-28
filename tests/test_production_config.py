@@ -117,3 +117,20 @@ def test_delegation_recovery_windows_are_bounded():
         production_settings(delegation_dispatch_stale_seconds=30)
     with pytest.raises(ValidationError):
         production_settings(delegation_recovery_grace_seconds=10)
+
+
+def test_attention_thresholds_are_bounded_and_ordered():
+    settings = production_settings(
+        attention_task_stale_seconds=900,
+        attention_commitment_decision_hours=12,
+        attention_commitment_critical_hours=48,
+        attention_approval_critical_hours=36,
+    )
+    assert settings.attention_task_stale_seconds == 900
+    assert settings.attention_commitment_critical_hours == 48
+
+    with pytest.raises(ValidationError, match="must exceed"):
+        production_settings(
+            attention_commitment_decision_hours=48,
+            attention_commitment_critical_hours=24,
+        )

@@ -42,6 +42,14 @@ services:
         value: "300"
       - key: DELEGATION_RECOVERY_GRACE_SECONDS
         value: "120"
+      - key: ATTENTION_TASK_STALE_SECONDS
+        value: "1200"
+      - key: ATTENTION_COMMITMENT_DECISION_HOURS
+        value: "24"
+      - key: ATTENTION_COMMITMENT_CRITICAL_HOURS
+        value: "72"
+      - key: ATTENTION_APPROVAL_CRITICAL_HOURS
+        value: "72"
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -121,6 +129,26 @@ services:
           type: web
           name: ai-company-os
           envVarKey: DELEGATION_RECOVERY_GRACE_SECONDS
+      - key: ATTENTION_TASK_STALE_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_TASK_STALE_SECONDS
+      - key: ATTENTION_COMMITMENT_DECISION_HOURS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_COMMITMENT_DECISION_HOURS
+      - key: ATTENTION_COMMITMENT_CRITICAL_HOURS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_COMMITMENT_CRITICAL_HOURS
+      - key: ATTENTION_APPROVAL_CRITICAL_HOURS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_APPROVAL_CRITICAL_HOURS
       - key: OPENAI_API_KEY
         fromService:
           type: web

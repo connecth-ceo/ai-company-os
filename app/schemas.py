@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import (
     ApprovalStatus,
+    AttentionKind,
+    AttentionLevel,
     CommitmentOwnerType,
     CommitmentSourceType,
     CommitmentStatus,
@@ -16,6 +18,29 @@ from app.models import (
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+class AttentionItemRead(BaseModel):
+    id: str
+    level: AttentionLevel
+    kind: AttentionKind
+    title: str
+    summary: str
+    recommendation: str
+    resource_type: str
+    resource_id: str
+    project_id: str | None
+    detected_at: datetime
+    age_seconds: int
+    evidence: dict[str, str | int | float | bool | None]
+
+
+class AttentionQueueRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    total: int
+    counts: dict[str, int]
+    items: list[AttentionItemRead]
 
 
 class ProjectCreate(BaseModel):

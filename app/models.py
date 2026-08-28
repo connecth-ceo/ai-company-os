@@ -82,6 +82,21 @@ class CommitmentSourceType(StrEnum):
     EXTERNAL = "external"
 
 
+class AttentionLevel(StrEnum):
+    INFO = "info"
+    WATCH = "watch"
+    ACTION = "action"
+    DECISION = "decision"
+    CRITICAL = "critical"
+
+
+class AttentionKind(StrEnum):
+    OVERDUE_COMMITMENT = "overdue_commitment"
+    LONG_RUNNING_TASK = "long_running_task"
+    TASK_FAILURE = "task_failure"
+    PENDING_APPROVAL = "pending_approval"
+
+
 class Base(DeclarativeBase):
     pass
 

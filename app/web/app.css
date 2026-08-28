@@ -39,7 +39,7 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .command-card button, .primary-button { border: 0; background: var(--forest); color: white; padding: 13px 18px; border-radius: 11px; font-weight: 750; }
 .command-card button span { color: var(--lime); margin-left: 10px; }
 .form-status { min-height: 18px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
-.metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
+.metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px; }
 .metrics article { border-top: 2px solid var(--forest); padding: 18px 4px; }
 .metrics span { font-size: 13px; color: var(--muted); }
 .metrics strong { display: block; font: 500 32px Georgia, serif; margin-top: 7px; }
@@ -63,6 +63,19 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .approval-actions { display: flex; gap: 8px; }
 .approval-actions button { flex: 1; border: 1px solid var(--forest); border-radius: 8px; padding: 9px; background: transparent; color: var(--forest); font-weight: 700; }
 .approval-actions .approve { background: var(--forest); color: white; }
+.attention-panel { margin-bottom: 18px; }
+.rule-badge { border-radius: 999px; padding: 6px 10px; background: #eef5df; color: var(--forest); font-size: 11px; font-weight: 800; }
+.attention-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.attention-item { border: 1px solid var(--line); border-left: 4px solid #9ea59c; border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.attention-item.level-action { border-left-color: #d7a42d; background: #fffdf6; }
+.attention-item.level-decision { border-left-color: var(--orange); background: #fff9f3; }
+.attention-item.level-critical { border-left-color: #9f2f23; background: #fff5f2; }
+.attention-heading { display: flex; gap: 7px; align-items: center; margin-bottom: 8px; }
+.attention-level, .attention-kind { border-radius: 999px; padding: 3px 7px; background: #e7e6df; color: var(--muted); font-size: 10px; font-weight: 800; }
+.level-decision .attention-level, .level-critical .attention-level { background: #f8ddd4; color: #8a3821; }
+.attention-item strong { display: block; font-size: 14px; }
+.attention-item p { margin: 6px 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
+.attention-item small { display: block; color: var(--muted); line-height: 1.45; }
 .activity-panel { margin-top: 18px; box-shadow: none; }
 .commitment-panel { margin-top: 18px; }
 .commitment-list { display: grid; gap: 10px; }
@@ -112,7 +125,7 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .hero { gap: 30px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .commitment-item { align-items: flex-start; flex-direction: column; }
-  .activity-list, .context-grid { grid-template-columns: 1fr; }
+  .activity-list, .context-grid, .attention-list { grid-template-columns: 1fr; }
 }
 @media (max-width: 520px) {
   .shell { padding: 34px 16px 70px; }

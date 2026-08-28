@@ -45,7 +45,17 @@
         <article><span>완료</span><strong id="metric-completed">0</strong></article>
         <article><span>승인 대기</span><strong id="metric-approvals">0</strong></article>
         <article><span>기한 초과 약속</span><strong id="metric-overdue">0</strong></article>
+        <article><span>대표 확인 필요</span><strong id="metric-attention">0</strong></article>
         <article><span>총 토큰</span><strong id="metric-tokens">0</strong></article>
+      </section>
+
+      <section class="panel attention-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">JARVIS ATTENTION</p><h2>대표 주의 큐</h2></div>
+          <span class="rule-badge">규칙 기반 · 비용 없음</span>
+        </div>
+        <p class="panel-note">지연 약속, 장기 실행, 실패, 승인 적체를 결정론적으로 정렬합니다. 항목을 탐지할 뿐 자동 실행하지 않습니다.</p>
+        <div id="attention-list" class="attention-list"><p class="empty">주의 항목을 확인하는 중입니다.</p></div>
       </section>
 
       <section class="workspace-grid">

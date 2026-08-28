@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
 from app.models import (
     Approval,
     ApprovalStatus,
@@ -12,6 +13,7 @@ from app.models import (
     Task,
     TaskStatus,
 )
+from app.services.attention import build_attention_queue
 
 
 async def build_daily_briefing(
@@ -19,10 +21,12 @@ async def build_daily_briefing(
     tenant_id: str,
     *,
     now: datetime | None = None,
+    settings: Settings | None = None,
 ) -> str:
     """Build a read-only briefing from company state without an AI call."""
 
     current = now or datetime.now(UTC)
+    runtime_settings = settings or get_settings()
     since = current - timedelta(hours=24)
     task_counts = dict(
         (
@@ -79,16 +83,12 @@ async def build_daily_briefing(
         )
         or 0
     )
-    attention_commitments = list(
-        await session.scalars(
-            select(Commitment)
-            .where(
-                *pending_commitment_conditions,
-                Commitment.due_at <= current + timedelta(hours=24),
-            )
-            .order_by(Commitment.due_at.asc())
-            .limit(5)
-        )
+    attention_queue = await build_attention_queue(
+        session,
+        tenant_id,
+        settings=runtime_settings,
+        now=current,
+        limit=5,
     )
 
     completed = task_counts.get(TaskStatus.COMPLETED, 0)
@@ -105,6 +105,8 @@ async def build_daily_briefing(
         f"• 완료 {completed}건 · 진행/대기 {active}건 · 실패 {failed}건",
         f"• 승인 대기 {pending_approvals}건",
         f"• 약속 지연 {overdue_commitments}건 · 24시간 내 마감 {due_soon_commitments}건",
+        "• 대표 확인 필요 "
+        f"{attention_queue.counts['decision'] + attention_queue.counts['critical']}건",
         "",
         "최근 업무",
     ]
@@ -112,20 +114,18 @@ async def build_daily_briefing(
         lines.extend(f"• [{task.status.value}] {task.title}" for task in recent_tasks)
     else:
         lines.append("• 아직 등록된 업무가 없습니다.")
-    if attention_commitments:
-        lines.extend(("", "약속·후속조치"))
-        for item in attention_commitments:
-            due = item.due_at
-            if due.tzinfo is None:
-                due = due.replace(tzinfo=UTC)
-            label = "지연" if due < current else "임박"
-            due_kst = due.astimezone(ZoneInfo("Asia/Seoul")).strftime("%m-%d %H:%M")
-            lines.append(f"• [{label}] {item.statement} · {item.owner_id} · {due_kst} KST")
-    if pending_approvals or overdue_commitments:
-        lines.append("")
-        lines.append("확인 필요")
-        if overdue_commitments:
-            lines.append("• 지연된 약속의 담당자와 다음 행동을 확인해 주세요.")
-        if pending_approvals:
-            lines.append("• 승인 대기 항목을 검토해 주세요.")
+    if attention_queue.items:
+        level_labels = {
+            "info": "정보",
+            "watch": "관찰",
+            "action": "행동",
+            "decision": "결정",
+            "critical": "긴급",
+        }
+        lines.extend(("", "대표 주의 큐"))
+        for item in attention_queue.items:
+            lines.append(
+                f"• [{level_labels[item.level.value]}] {item.title}: {item.summary}"
+            )
+            lines.append(f"  ↳ {item.recommendation}")
     return "\n".join(lines)
