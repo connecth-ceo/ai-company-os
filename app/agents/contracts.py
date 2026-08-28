@@ -24,7 +24,13 @@ class AgentRuntime(Protocol):
 
     name: str
 
-    async def run(self, definition: AgentDefinition, input_text: str) -> AgentRunResult: ...
+    async def run(
+        self,
+        definition: AgentDefinition,
+        input_text: str,
+        *,
+        max_output_tokens: int | None = None,
+    ) -> AgentRunResult: ...
 
 
 @runtime_checkable

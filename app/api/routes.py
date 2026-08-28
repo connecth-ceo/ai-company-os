@@ -30,6 +30,7 @@ from app.schemas import (
     DecisionCreate,
     DecisionRead,
     DelegatedTaskCreate,
+    DelegationDispatchResponse,
     DelegationRead,
     DispatchResponse,
     KnowledgeCreate,
@@ -46,6 +47,11 @@ from app.schemas import (
 )
 from app.services.audit import add_audit_event
 from app.services.delegation import DelegationRejected, create_delegation
+from app.services.delegation_execution import (
+    DelegationExecutionRejected,
+    dispatch_delegation,
+    execute_delegation_with_new_session,
+)
 from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
@@ -248,6 +254,94 @@ async def list_task_delegations(
     return list(await session.scalars(query))
 
 
+@router.get("/delegations/{delegation_id}", response_model=DelegationRead)
+async def get_delegation(
+    delegation_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Delegation:
+    delegation = await session.scalar(
+        select(Delegation).where(
+            Delegation.id == delegation_id,
+            Delegation.tenant_id == context.tenant_id,
+        )
+    )
+    if delegation is None:
+        raise HTTPException(status_code=404, detail="Delegation not found")
+    return delegation
+
+
+@router.post(
+    "/delegations/{delegation_id}/run",
+    response_model=DelegationDispatchResponse,
+    status_code=202,
+)
+async def run_delegation(
+    delegation_id: str,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> DelegationDispatchResponse:
+    delegation = await session.scalar(
+        select(Delegation).where(
+            Delegation.id == delegation_id,
+            Delegation.tenant_id == context.tenant_id,
+        )
+    )
+    if delegation is None:
+        raise HTTPException(status_code=404, detail="Delegation not found")
+    try:
+        child = await dispatch_delegation(
+            session,
+            delegation,
+            settings,
+            actor=context.actor,
+        )
+    except DelegationExecutionRejected as exc:
+        add_audit_event(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            action="delegation.execution_rejected",
+            resource_type="delegation",
+            resource_id=delegation.id,
+            details={"code": exc.code},
+        )
+        await session.commit()
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
+
+    if settings.task_execution_mode == "worker":
+        from app.worker import execute_delegation_job
+
+        try:
+            execute_delegation_job.delay(delegation.id)
+        except Exception as exc:
+            delegation.status = "created"
+            delegation.error = f"Queue dispatch failed: {type(exc).__name__}"
+            child.status = child.status.QUEUED
+            child.error = delegation.error
+            add_audit_event(
+                session,
+                tenant_id=context.tenant_id,
+                actor="system",
+                action="delegation.dispatch_failed",
+                resource_type="delegation",
+                resource_id=delegation.id,
+                details={"error_type": type(exc).__name__},
+            )
+            await session.commit()
+            raise HTTPException(status_code=503, detail="Background queue is unavailable") from exc
+    else:
+        background_tasks.add_task(execute_delegation_with_new_session, delegation.id, False)
+    return DelegationDispatchResponse(
+        delegation_id=delegation.id,
+        child_task_id=child.id,
+        status=delegation.status,
+        execution_mode=settings.task_execution_mode,
+    )
+
+
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 async def get_task(
     task_id: str,
@@ -274,6 +368,11 @@ async def run_task(
     context: TenantContext = Depends(get_tenant_context),
 ) -> DispatchResponse:
     task = await require_task(session, task_id, context.tenant_id)
+    if task.source == "delegation":
+        raise HTTPException(
+            status_code=409,
+            detail="Delegated tasks must run through their delegation execution endpoint",
+        )
     if task.status in {task.status.DISPATCHED, task.status.RUNNING}:
         raise HTTPException(status_code=409, detail="Task is already running")
     task.status = task.status.DISPATCHED

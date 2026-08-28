@@ -55,6 +55,7 @@ GET /api/v1/tasks/{parent_task_id}/delegations
 
 - 정책 버전, 깊이·개수 상한과 실제 깊이.
 - Agent Registry의 역할 키, 허용 도구, 권한, 승인 정책.
+- Agent 정의 버전과 provider/model.
 - 요청된 토큰·시간·비용 예산.
 
 이 스냅샷은 향후 정책이나 Registry가 바뀌어도 당시 허용 근거를 재현하기 위한 기록이다.
@@ -73,22 +74,27 @@ GET /api/v1/tasks/{parent_task_id}/delegations
 
 ## 데이터베이스 이전
 
-- Alembic revision: `d4e6a8b0c2f4`
+- 생성 가드레일 revision: `d4e6a8b0c2f4`
+- 역할 실행 원장 revision: `e6f8a0c2d4b6`
 - `delegations` 테이블을 추가한다.
 - 기존 Project, Task, TaskRun, WorkflowRun 데이터는 수정하거나 삭제하지 않는다.
 - 부모·자식 Task와 Project 삭제는 위임 기록이 있으면 `RESTRICT`한다.
 - downgrade는 `delegations` 테이블만 제거한다.
 
+## 후속 실행 기능
+
+단일 역할 실행 경계가 추가됐다. 상세 API, 재검사 항목, 상태와 사용량 원장은
+[DELEGATED_ROLE_EXECUTION_KO.md](DELEGATED_ROLE_EXECUTION_KO.md)를 참고한다.
+
 ## 현재 의도적으로 하지 않는 것
 
 - AI 직원 간 자유 채팅과 무제한 재귀 위임.
 - 생성 즉시 자동 실행 또는 OpenAI 비용 발생.
-- `delegated_role`에 따른 별도 단일 Agent 실행 라우팅.
-- 예산의 실시간 토큰/비용 차감 원장.
+- 비용 공급자 청구서와 연결된 실시간 USD 차감 원장.
 - 도구 실행과 대표 승인 자동 연결.
 
-위임 하위 Task를 `/run`으로 실행하면 현재 V0.5 표준 Workflow를 사용한다. 저장된 역할 스냅샷을 실제
-단일 Agent 실행에 강제 연결하는 기능은 후속 Orchestrator 실행 단위에서 추가해야 한다.
+위임 하위 Task는 일반 `/run`으로 실행할 수 없다. 위임 전용 실행 API만 저장된 역할과 현재 Registry를
+대조한 뒤 단일 Agent를 실행한다.
 
 ## 로컬 검증 결과
 
@@ -110,5 +116,5 @@ GET /api/v1/tasks/{parent_task_id}/delegations
 - 하위 Task의 `source=delegation`, `status=queued`, depth 1 확인.
 - smoke test 중 OpenAI 업무를 실행하지 않았고 AI 호출 비용도 발생하지 않음.
 
-실제 단일 Agent 역할 라우팅과 도구 실행은 아직 의도적으로 연결하지 않았다. 이 기능에는 역할별 권한,
-승인 정책, 실제 소비 예산 원장이 함께 필요하다.
+이 절의 클라우드 결과는 생성 가드레일 배포 시점 기록이다. 역할 실행 revision의 클라우드 검증 여부는
+별도 완료 보고서에서 구분한다.

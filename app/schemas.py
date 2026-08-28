@@ -130,7 +130,25 @@ class DelegationRead(ORMModel):
     timeout_seconds: int
     cost_budget_usd: float
     policy_snapshot: dict
+    task_run_id: str | None
+    runtime_name: str | None
+    provider: str | None
+    model: str | None
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    duration_ms: int | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    error: str | None
     created_at: datetime
+
+
+class DelegationDispatchResponse(BaseModel):
+    delegation_id: str
+    child_task_id: str
+    status: str
+    execution_mode: str
 
 
 class DispatchResponse(BaseModel):

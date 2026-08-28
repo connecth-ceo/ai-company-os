@@ -3,6 +3,10 @@ import asyncio
 from celery import Celery
 
 from app.core.config import get_settings
+from app.services.delegation_execution import (
+    DelegationExecutionError,
+    execute_delegation_with_new_session,
+)
 from app.services.task_service import TaskExecutionError, execute_task_with_new_session
 
 settings = get_settings()
@@ -36,3 +40,12 @@ def execute_task_job(self, task_id: str) -> None:
     except TaskExecutionError as exc:
         countdown = min(2 ** (self.request.retries + 1), 30)
         raise self.retry(exc=exc, countdown=countdown) from exc
+
+
+@celery_app.task(bind=True, name="ai_company.execute_delegation", max_retries=0)
+def execute_delegation_job(self, delegation_id: str) -> None:
+    del self
+    try:
+        asyncio.run(execute_delegation_with_new_session(delegation_id, True))
+    except DelegationExecutionError:
+        raise

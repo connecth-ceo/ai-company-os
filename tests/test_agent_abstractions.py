@@ -121,7 +121,11 @@ async def test_openai_runtime_adapts_agent_runner_and_tools(monkeypatch):
     )
 
     definition = build_v04_agent_registry(Settings(ai_provider="mock")).require(RESEARCH_AGENT_KEY)
-    result = await OpenAIAgentsRuntime(api_key="runtime-key").run(definition, "CEO request")
+    result = await OpenAIAgentsRuntime(api_key="runtime-key").run(
+        definition,
+        "CEO request",
+        max_output_tokens=321,
+    )
 
     assert result.final_output == "adapter result"
     assert result.usage == RuntimeUsage(input_tokens=2, output_tokens=3, total_tokens=5)
@@ -133,6 +137,7 @@ async def test_openai_runtime_adapts_agent_runner_and_tools(monkeypatch):
     assert captured["api_key"] == "runtime-key"
     assert captured["key_used_for_tracing"] is False
     assert captured["model_settings"].store is False
+    assert captured["model_settings"].max_tokens == 321
 
 
 class ScriptedRuntime:

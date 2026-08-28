@@ -199,6 +199,19 @@ class Delegation(Base, TimestampMixin):
     timeout_seconds: Mapped[int] = mapped_column(Integer)
     cost_budget_usd: Mapped[float] = mapped_column(Numeric(10, 4))
     policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    task_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
+    )
+    runtime_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Memory(Base, TimestampMixin):

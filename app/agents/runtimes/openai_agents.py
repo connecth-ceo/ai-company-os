@@ -47,7 +47,13 @@ class OpenAIAgentsRuntime:
         self.tool_provider = tool_provider or OpenAIToolProvider()
         self.store_responses = store_responses
 
-    async def run(self, definition: AgentDefinition, input_text: str) -> AgentRunResult:
+    async def run(
+        self,
+        definition: AgentDefinition,
+        input_text: str,
+        *,
+        max_output_tokens: int | None = None,
+    ) -> AgentRunResult:
         from agents import Agent, ModelSettings, Runner
 
         agent_kwargs: dict[str, Any] = {
@@ -55,7 +61,10 @@ class OpenAIAgentsRuntime:
             "instructions": definition.system_prompt,
             "model": self.model_provider.resolve_model(definition.model_policy),
             "tools": self.tool_provider.resolve_tools(definition.allowed_tools),
-            "model_settings": ModelSettings(store=self.store_responses),
+            "model_settings": ModelSettings(
+                store=self.store_responses,
+                max_tokens=max_output_tokens,
+            ),
         }
         if definition.output_schema is not None:
             agent_kwargs["output_type"] = definition.output_schema

@@ -17,6 +17,7 @@
 - 실행 재시도·시간 제한·토큰 사용량·감사 이벤트
 - 버전 있는 WorkflowDefinition과 TaskRun별 불변 실행계획 기록
 - Orchestrator 매개 하위업무 위임과 깊이·개수·순환·역할·예산 가드레일
+- 위임 전용 단일 역할 실행, 정책 재검사, 토큰·시간 사용 원장
 - CEO 웹 대시보드와 Telegram webhook
 - 저장된 회사 기억·대표 결정·지식을 다음 AI 업무에 자동 반영
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
@@ -62,8 +63,12 @@ JARVIS형 확장 분석은 [JARVIS_AI_COMPANY_OS_GAP_ANALYSIS.md](JARVIS_AI_COMP
 Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT_TASK_HIERARCHY_KO.md)에
 설명되어 있습니다. 기존 고정 실행의 버전·계획·결과 기록 구조는
 [docs/WORKFLOW_RECORDING_LAYER_KO.md](docs/WORKFLOW_RECORDING_LAYER_KO.md)에 있습니다.
-안전한 하위업무 위임 API와 정책은
-[docs/DELEGATION_GUARDRAILS_KO.md](docs/DELEGATION_GUARDRAILS_KO.md)에 있습니다.
+안전한 하위업무 생성 정책은
+[docs/DELEGATION_GUARDRAILS_KO.md](docs/DELEGATION_GUARDRAILS_KO.md), 단일 역할 실행 절차는
+[docs/DELEGATED_ROLE_EXECUTION_KO.md](docs/DELEGATED_ROLE_EXECUTION_KO.md)에 있습니다.
+구현·검증 완료 범위와 아직 운영 자격증명이 필요한 항목은
+[docs/DELEGATED_ROLE_EXECUTION_COMPLETION_REPORT_KO.md](docs/DELEGATED_ROLE_EXECUTION_COMPLETION_REPORT_KO.md)에
+구분해 기록했습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
