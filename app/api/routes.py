@@ -36,6 +36,7 @@ from app.models import (
 from app.schemas import (
     ActionIntentCreate,
     ActionIntentRead,
+    AgentDirectoryEntryRead,
     AICostLedgerRead,
     AICostSummaryRead,
     ApprovalCreate,
@@ -70,7 +71,7 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
-from app.services import action_intents, attention, commitments, decision_memory
+from app.services import action_intents, agent_directory, attention, commitments, decision_memory
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -87,6 +88,26 @@ from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/agents", response_model=list[AgentDirectoryEntryRead])
+async def list_agents(
+    settings: Settings = Depends(get_settings),
+    _: TenantContext = Depends(get_tenant_context),
+) -> tuple[AgentDirectoryEntryRead, ...]:
+    return agent_directory.list_public_agent_profiles(settings)
+
+
+@router.get("/agents/{agent_key}", response_model=AgentDirectoryEntryRead)
+async def get_agent(
+    agent_key: str,
+    settings: Settings = Depends(get_settings),
+    _: TenantContext = Depends(get_tenant_context),
+) -> AgentDirectoryEntryRead:
+    profile = agent_directory.get_public_agent_profile(settings, agent_key)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return profile
 
 
 def action_intent_rejection(error: action_intents.ActionIntentRejected) -> HTTPException:

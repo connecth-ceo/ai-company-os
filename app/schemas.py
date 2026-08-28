@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.agents.definitions import EvaluationStatus
 from app.models import (
     ActionIntentStatus,
     ApprovalStatus,
@@ -82,6 +83,26 @@ class ToolDescriptorRead(BaseModel):
     required_permissions: list[str]
     side_effects: bool
     approval_required: bool
+
+
+class AgentDirectoryEntryRead(BaseModel):
+    key: str
+    role: str
+    purpose: str
+    provider: str
+    model: str
+    capabilities: tuple[str, ...]
+    memory_scope: tuple[str, ...]
+    allowed_tools: tuple[str, ...]
+    permissions: tuple[str, ...]
+    approval_policy: str
+    knowledge_collections: tuple[str, ...]
+    workflow_templates: tuple[str, ...]
+    schedules: tuple[str, ...]
+    working_environment: str
+    version: str
+    evaluation_status: EvaluationStatus
+    structured_output: bool
 
 
 class ProjectCreate(BaseModel):

@@ -15,6 +15,7 @@
 - OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
 - 중앙 Tool Gateway를 통한 읽기 전용 웹 검색 권한 검증과 감사 메타데이터
 - 외부 행동 payload hash·만료·단일사용 범위를 고정하는 제안 전용 ActionIntent
+- 프롬프트·비밀값을 제외한 읽기 전용 AI Employee Registry
 - Docker Compose 로컬/배포 기준 구성
 - API 키 인증, 회사별 데이터 격리, 중복 요청 방지
 - 실행 재시도·시간 제한·토큰 사용량·감사 이벤트
@@ -104,6 +105,9 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 승인 대상을 불변 payload와 연결하는 구조는
 [docs/ACTION_INTENT_KO.md](docs/ACTION_INTENT_KO.md), 구현·검증 범위는
 [docs/ACTION_INTENT_COMPLETION_REPORT_KO.md](docs/ACTION_INTENT_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
+AI 직원 역할·버전·도구·승인 정책 조회 기준은
+[docs/AI_EMPLOYEE_REGISTRY_KO.md](docs/AI_EMPLOYEE_REGISTRY_KO.md), 구현 범위는
+[docs/AI_EMPLOYEE_REGISTRY_COMPLETION_REPORT_KO.md](docs/AI_EMPLOYEE_REGISTRY_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
