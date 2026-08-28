@@ -9,6 +9,8 @@ const state = {
   attention: { total: 0, counts: {}, items: [] },
   briefingSchedule: { enabled: false, last_delivery: null },
   knowledge: [],
+  projects: [],
+  agents: [],
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -64,6 +66,18 @@ const attentionKindLabels = {
   pending_approval: "승인 대기",
 };
 
+const projectStatusLabels = {
+  planned: "계획", active: "진행 중", on_hold: "보류", completed: "완료", archived: "보관",
+};
+
+const evaluationStatusLabels = {
+  untested: "미평가", baseline: "기준 검증", pilot: "파일럿", approved: "운영 승인",
+};
+
+function projectTitle(projectId) {
+  return state.projects.find((project) => project.id === projectId)?.title || "";
+}
+
 function renderTasks() {
   if (!state.tasks.length) {
     $("#task-list").innerHTML = '<p class="empty">첫 업무를 지시해 보세요.</p>';
@@ -73,6 +87,7 @@ function renderTasks() {
     <article class="task-item">
       <div class="task-meta">
         <span class="status-pill ${escapeHtml(task.status)}">${statusLabels[task.status] || task.status}</span>
+        ${task.project_id ? `<span class="task-project">${escapeHtml(projectTitle(task.project_id) || "프로젝트")}</span>` : ""}
         <span>우선순위 ${task.priority}</span><span>${new Date(task.created_at).toLocaleString("ko-KR")}</span>
       </div>
       <h3>${escapeHtml(task.title)}</h3>
@@ -107,6 +122,60 @@ function renderMetrics() {
   $("#metric-attention").textContent = (state.attention.counts.decision || 0) + (state.attention.counts.critical || 0);
   const tokens = state.tasks.reduce((sum, task) => sum + (task.runs?.reduce((runSum, run) => runSum + run.total_tokens, 0) || 0), 0);
   $("#metric-tokens").textContent = new Intl.NumberFormat("ko-KR").format(tokens);
+}
+
+function renderProjects() {
+  const select = $("#task-project");
+  const selectedProject = select.value;
+  const selectableProjects = state.projects.filter((project) => !["completed", "archived"].includes(project.status));
+  select.innerHTML = '<option value="">프로젝트 미지정</option>' + selectableProjects.map((project) => (
+    `<option value="${project.id}">${escapeHtml(project.title)}</option>`
+  )).join("");
+  if (selectableProjects.some((project) => project.id === selectedProject)) select.value = selectedProject;
+
+  if (!state.projects.length) {
+    $("#project-list").innerHTML = '<p class="empty">첫 프로젝트를 만들어 업무를 목표별로 묶어보세요.</p>';
+    return;
+  }
+  $("#project-list").innerHTML = state.projects.slice(0, 8).map((project) => {
+    const tasks = state.tasks.filter((task) => task.project_id === project.id);
+    const active = tasks.filter((task) => ["queued", "dispatched", "running"].includes(task.status)).length;
+    const completed = tasks.filter((task) => task.status === "completed").length;
+    return `
+      <article class="project-card">
+        <div class="project-heading">
+          <strong>${escapeHtml(project.title)}</strong>
+          <span class="project-status ${escapeHtml(project.status)}">${escapeHtml(projectStatusLabels[project.status] || project.status)}</span>
+        </div>
+        ${project.description ? `<p>${escapeHtml(project.description)}</p>` : ""}
+        <div class="project-stats">
+          <span class="project-stat">전체 업무 ${tasks.length}</span>
+          <span class="project-stat">진행 ${active}</span>
+          <span class="project-stat">완료 ${completed}</span>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+function renderAgents() {
+  if (!state.agents.length) {
+    $("#agent-list").innerHTML = '<p class="empty">등록된 AI 직원이 없습니다.</p>';
+    return;
+  }
+  $("#agent-list").innerHTML = state.agents.map((agent) => `
+    <article class="agent-card">
+      <div class="agent-heading">
+        <div><span class="agent-role">${escapeHtml(agent.role)}</span><strong>${escapeHtml(agent.key)}</strong></div>
+        <span class="agent-chip ${escapeHtml(agent.evaluation_status)}">${escapeHtml(evaluationStatusLabels[agent.evaluation_status] || agent.evaluation_status)}</span>
+      </div>
+      <p>${escapeHtml(agent.purpose)}</p>
+      <div class="agent-boundaries">
+        <span class="agent-chip">${escapeHtml(agent.provider)} · ${escapeHtml(agent.model)}</span>
+        ${(agent.allowed_tools || []).map((tool) => `<span class="agent-chip">도구 ${escapeHtml(tool)}</span>`).join("")}
+        <span class="agent-chip approval">${escapeHtml(agent.approval_policy)}</span>
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderAttention() {
@@ -196,12 +265,14 @@ function renderCompanyContext() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, projects, agents] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
       api("/api/v1/briefing-schedule"),
       api("/api/v1/knowledge"),
+      api("/api/v1/projects"),
+      api("/api/v1/agents"),
     ]);
     state.tasks = await Promise.all(tasks.map((task) => api(`/api/v1/tasks/${task.id}`)));
     state.approvals = approvals;
@@ -211,7 +282,9 @@ async function loadDashboard() {
     state.attention = attention;
     state.briefingSchedule = briefingSchedule;
     state.knowledge = knowledge;
-    renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext();
+    state.projects = projects;
+    state.agents = agents;
+    renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderAgents();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
@@ -233,6 +306,7 @@ $("#task-form").addEventListener("submit", async (event) => {
     const task = await api("/api/v1/tasks", { method: "POST", body: JSON.stringify({
       title: request.replace(/\s+/g, " ").slice(0, 80), request,
       priority: Number($("#task-priority").value), idempotency_key: crypto.randomUUID(),
+      project_id: $("#task-project").value || null,
     }) });
     await api(`/api/v1/tasks/${task.id}/run`, { method: "POST" });
     $("#task-request").value = "";
@@ -253,6 +327,7 @@ $("#approval-list").addEventListener("click", async (event) => {
 });
 
 $("#refresh-button").addEventListener("click", loadDashboard);
+$("#add-project-button").addEventListener("click", () => $("#project-dialog").showModal());
 $("#add-commitment-button").addEventListener("click", () => {
   const availableDecisions = state.decisions.filter((item) => ["proposed", "active"].includes(item.status));
   $("#commitment-decision-id").innerHTML = '<option value="">연결하지 않음</option>'
@@ -275,6 +350,22 @@ $("#add-decision-button").addEventListener("click", () => {
 });
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close());
+});
+
+$("#project-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("#project-form-status").textContent = "저장 중입니다…";
+  try {
+    await api("/api/v1/projects", { method: "POST", body: JSON.stringify({
+      title: $("#project-title").value.trim(),
+      description: $("#project-description").value.trim() || null,
+      status: $("#project-status").value,
+    }) });
+    $("#project-form").reset();
+    $("#project-form-status").textContent = "";
+    $("#project-dialog").close();
+    await loadDashboard();
+  } catch (error) { $("#project-form-status").textContent = error.message; }
 });
 
 $("#memory-form").addEventListener("submit", async (event) => {

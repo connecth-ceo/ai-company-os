@@ -27,6 +27,9 @@
           <label for="task-request">새 업무 지시</label>
           <textarea id="task-request" rows="5" required placeholder="예: 경쟁사 5곳을 조사하고 다음 분기 진입 전략을 만들어줘."></textarea>
           <div class="form-row">
+            <select id="task-project" aria-label="업무 프로젝트">
+              <option value="">프로젝트 미지정</option>
+            </select>
             <select id="task-priority" aria-label="업무 우선순위">
               <option value="3">보통 우선순위</option>
               <option value="1">최우선</option>
@@ -79,6 +82,26 @@
         </aside>
       </section>
 
+      <section class="executive-grid">
+        <article class="panel projects-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">PROJECT PORTFOLIO</p><h2>프로젝트</h2></div>
+            <button class="primary-button compact-button" id="add-project-button">새 프로젝트</button>
+          </div>
+          <p class="panel-note">대표 목표를 프로젝트로 묶고, 새 업무를 선택한 프로젝트에 연결합니다.</p>
+          <div id="project-list" class="project-list"><p class="empty">등록된 프로젝트가 없습니다.</p></div>
+        </article>
+
+        <article class="panel ai-team-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">AI EMPLOYEE REGISTRY</p><h2>AI 팀</h2></div>
+            <span class="rule-badge">읽기 전용</span>
+          </div>
+          <p class="panel-note">각 AI 직원의 역할·도구·승인 경계를 표시합니다. 프롬프트와 비밀값은 노출하지 않습니다.</p>
+          <div id="agent-list" class="agent-list"><p class="empty">AI 팀을 불러오는 중입니다.</p></div>
+        </article>
+      </section>
+
       <section class="panel commitment-panel">
         <div class="panel-heading">
           <div><p class="eyebrow">COMMITMENTS</p><h2>약속·후속조치</h2></div>
@@ -123,6 +146,23 @@
       </section>
     </main>
 
+    <dialog id="project-dialog">
+      <form id="project-form">
+        <div class="panel-heading"><h2>새 프로젝트</h2><button type="button" class="close-button" data-close-dialog="project-dialog" aria-label="닫기">×</button></div>
+        <label for="project-title">프로젝트 이름</label>
+        <input id="project-title" required maxlength="240" placeholder="예: 첫 유료 고객 확보" />
+        <label for="project-description">목표와 범위</label>
+        <textarea id="project-description" rows="4" maxlength="50000" placeholder="예: 4주 안에 인터뷰, 제안, 계약까지 검증한다."></textarea>
+        <label for="project-status">시작 상태</label>
+        <select id="project-status">
+          <option value="active">진행 중</option>
+          <option value="planned">계획</option>
+          <option value="on_hold">보류</option>
+        </select>
+        <p class="form-status" id="project-form-status" aria-live="polite"></p>
+        <button class="primary-button" type="submit">프로젝트 저장</button>
+      </form>
+    </dialog>
     <dialog id="settings-dialog">
       <form method="dialog" id="settings-form">
         <div class="panel-heading"><h2>연결 설정</h2><button value="cancel" class="close-button" aria-label="닫기">×</button></div>
