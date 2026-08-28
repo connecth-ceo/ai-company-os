@@ -4,6 +4,8 @@ from app.agents.contracts import (
     AgentRuntime,
     KnowledgeRetriever,
     ModelProvider,
+    ResolvedTools,
+    ToolAuthorization,
     ToolProvider,
 )
 from app.agents.definitions import AgentDefinition, ModelPolicy
@@ -16,5 +18,7 @@ __all__ = [
     "KnowledgeRetriever",
     "ModelPolicy",
     "ModelProvider",
+    "ResolvedTools",
+    "ToolAuthorization",
     "ToolProvider",
 ]

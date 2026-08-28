@@ -5,6 +5,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.agents.tool_gateway import public_tool_catalog
 from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
@@ -62,6 +63,7 @@ from app.schemas import (
     TaskCreate,
     TaskDetail,
     TaskRead,
+    ToolDescriptorRead,
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
@@ -82,6 +84,24 @@ from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/tool-catalog", response_model=list[ToolDescriptorRead])
+async def get_tool_catalog(
+    _: TenantContext = Depends(get_tenant_context),
+) -> list[ToolDescriptorRead]:
+    return [
+        ToolDescriptorRead(
+            key=item.key,
+            purpose=item.purpose,
+            provider=item.provider,
+            risk=item.risk.value,
+            required_permissions=list(item.required_permissions),
+            side_effects=item.side_effects,
+            approval_required=item.approval_required,
+        )
+        for item in public_tool_catalog()
+    ]
 
 
 @router.get("/attention", response_model=AttentionQueueRead)

@@ -1,8 +1,8 @@
-from collections.abc import Sequence
 from typing import Any
 
 from app.agents.contracts import AgentRunResult, ModelProvider, RuntimeUsage, ToolProvider
 from app.agents.definitions import AgentDefinition, ModelPolicy
+from app.agents.tool_gateway import OpenAIToolGateway
 
 
 class OpenAIModelProvider:
@@ -14,15 +14,8 @@ class OpenAIModelProvider:
         return policy.model
 
 
-class OpenAIToolProvider:
-    def resolve_tools(self, tool_names: Sequence[str]) -> list[Any]:
-        from agents import WebSearchTool
-
-        factories = {"web_search": WebSearchTool}
-        unknown = sorted(set(tool_names) - factories.keys())
-        if unknown:
-            raise ValueError(f"Unsupported OpenAI tool(s): {', '.join(unknown)}")
-        return [factories[name]() for name in tool_names]
+class OpenAIToolProvider(OpenAIToolGateway):
+    """Backward-compatible name for the central OpenAI tool gateway."""
 
 
 class OpenAIAgentsRuntime:
@@ -56,11 +49,12 @@ class OpenAIAgentsRuntime:
     ) -> AgentRunResult:
         from agents import Agent, ModelSettings, Runner
 
+        resolved_tools = self.tool_provider.resolve_tools(definition)
         agent_kwargs: dict[str, Any] = {
             "name": definition.role,
             "instructions": definition.system_prompt,
             "model": self.model_provider.resolve_model(definition.model_policy),
-            "tools": self.tool_provider.resolve_tools(definition.allowed_tools),
+            "tools": list(resolved_tools.runtime_tools),
             "model_settings": ModelSettings(
                 store=self.store_responses,
                 max_tokens=max_output_tokens,
@@ -78,4 +72,5 @@ class OpenAIAgentsRuntime:
                 output_tokens=int(usage.output_tokens or 0),
                 total_tokens=int(usage.total_tokens or 0),
             ),
+            tool_authorizations=resolved_tools.authorizations,
         )

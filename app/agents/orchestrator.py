@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.agents.contracts import AgentRuntime
+from app.agents.contracts import AgentRuntime, ToolAuthorization
 from app.agents.operational_registry import (
     LEGAL_REVIEW_AGENT_KEY,
     MARKETING_AGENT_KEY,
@@ -36,6 +36,7 @@ class OrchestrationResult:
     company_context_used: bool = False
     workflow: str = "default"
     specialist_brief: str = ""
+    tool_authorizations: list[ToolAuthorization] = field(default_factory=list)
 
     def artifacts(self) -> dict[str, Any]:
         return {
@@ -53,6 +54,16 @@ class OrchestrationResult:
             "company_context_used": self.company_context_used,
             "workflow": self.workflow,
             "specialist_brief": self.specialist_brief,
+            "tool_authorizations": [
+                {
+                    "tool_name": item.tool_name,
+                    "agent_key": item.agent_key,
+                    "risk": item.risk,
+                    "required_permissions": list(item.required_permissions),
+                    "invocation_observed": item.invocation_observed,
+                }
+                for item in self.tool_authorizations
+            ],
         }
 
 
@@ -249,6 +260,11 @@ async def run_openai(
         approval_requests = chief_output.approval_requests
 
     usages = [run.usage for run in all_runs]
+    tool_authorizations = {
+        (item.agent_key, item.tool_name): item
+        for run in all_runs
+        for item in run.tool_authorizations
+    }
 
     return OrchestrationResult(
         final_report=report,
@@ -264,6 +280,7 @@ async def run_openai(
         company_context_used=bool(company_context),
         workflow=workflow,
         specialist_brief=specialist_brief,
+        tool_authorizations=list(tool_authorizations.values()),
     )
 
 

@@ -70,6 +70,16 @@ class BriefingScheduleRead(BaseModel):
     last_delivery: BriefingDeliveryRead | None
 
 
+class ToolDescriptorRead(BaseModel):
+    key: str
+    purpose: str
+    provider: str
+    risk: str
+    required_permissions: list[str]
+    side_effects: bool
+    approval_required: bool
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=50_000)

@@ -216,6 +216,22 @@ async def execute_task(
                 details={"task_id": task.id, "risk": approval_request.risk},
             )
             existing_approval_actions.add(approval_request.action)
+        for authorization in outcome.tool_authorizations:
+            add_audit_event(
+                session,
+                tenant_id=task.tenant_id,
+                actor=authorization.agent_key,
+                action="tool.access_authorized",
+                resource_type="task",
+                resource_id=task.id,
+                details={
+                    "task_run_id": run.id,
+                    "tool_name": authorization.tool_name,
+                    "risk": authorization.risk,
+                    "required_permissions": list(authorization.required_permissions),
+                    "invocation_observed": authorization.invocation_observed,
+                },
+            )
         add_audit_event(
             session,
             tenant_id=task.tenant_id,

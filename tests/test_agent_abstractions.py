@@ -9,6 +9,7 @@ from app.agents.outputs import ApprovalRequest, ChiefOutput, ReviewerOutput
 from app.agents.prompts import CHIEF_INSTRUCTIONS, RESEARCH_INSTRUCTIONS, STRATEGY_INSTRUCTIONS
 from app.agents.registry import AgentRegistry, DuplicateAgentError, UnknownAgentError
 from app.agents.runtimes import OpenAIAgentsRuntime
+from app.agents.tool_gateway import OpenAIToolGateway, ToolDescriptor, ToolPolicyError, ToolRisk
 from app.agents.v04_registry import (
     CHIEF_AGENT_KEY,
     RESEARCH_AGENT_KEY,
@@ -129,6 +130,9 @@ async def test_openai_runtime_adapts_agent_runner_and_tools(monkeypatch):
 
     assert result.final_output == "adapter result"
     assert result.usage == RuntimeUsage(input_tokens=2, output_tokens=3, total_tokens=5)
+    assert result.tool_authorizations[0].tool_name == "web_search"
+    assert result.tool_authorizations[0].agent_key == RESEARCH_AGENT_KEY
+    assert result.tool_authorizations[0].invocation_observed is False
     assert captured["name"] == "Research Agent"
     assert captured["model"] == definition.model_policy.model
     assert isinstance(captured["tools"][0], FakeWebSearchTool)
@@ -138,6 +142,51 @@ async def test_openai_runtime_adapts_agent_runner_and_tools(monkeypatch):
     assert captured["key_used_for_tracing"] is False
     assert captured["model_settings"].store is False
     assert captured["model_settings"].max_tokens == 321
+
+
+def test_tool_gateway_fails_closed_for_missing_permission_and_side_effects():
+    model_policy = ModelPolicy(provider="openai", model="test-model")
+    missing_permission = AgentDefinition(
+        key="unsafe_research",
+        role="Unsafe Research",
+        purpose="Test",
+        system_prompt="Test",
+        model_policy=model_policy,
+        allowed_tools=("web_search",),
+        permissions=(),
+    )
+    gateway = OpenAIToolGateway(factories={"web_search": object})
+
+    with pytest.raises(ToolPolicyError, match="lacks permission") as denied:
+        gateway.resolve_tools(missing_permission)
+    assert denied.value.code == "permission_denied"
+
+    write_tool = ToolDescriptor(
+        key="external_publish",
+        purpose="Publish content externally.",
+        provider="test",
+        risk=ToolRisk.EXTERNAL_WRITE,
+        required_permissions=("external.publish",),
+        side_effects=True,
+        approval_required=True,
+    )
+    publisher = AgentDefinition(
+        key="publisher",
+        role="Publisher",
+        purpose="Test",
+        system_prompt="Test",
+        model_policy=model_policy,
+        allowed_tools=("external_publish",),
+        permissions=("external.publish",),
+        approval_policy="ceo_required",
+    )
+    gateway = OpenAIToolGateway(
+        catalog=(write_tool,),
+        factories={"external_publish": object},
+    )
+    with pytest.raises(ToolPolicyError, match="immutable approval context") as blocked:
+        gateway.resolve_tools(publisher)
+    assert blocked.value.code == "approval_context_required"
 
 
 class ScriptedRuntime:

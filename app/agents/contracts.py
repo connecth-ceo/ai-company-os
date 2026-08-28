@@ -13,9 +13,30 @@ class RuntimeUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolAuthorization:
+    """A policy decision to expose a tool to one agent run.
+
+    This records authorization, not proof that the model invoked the tool.
+    """
+
+    tool_name: str
+    agent_key: str
+    risk: str
+    required_permissions: tuple[str, ...] = ()
+    invocation_observed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedTools:
+    runtime_tools: tuple[Any, ...] = ()
+    authorizations: tuple[ToolAuthorization, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class AgentRunResult:
     final_output: Any
     usage: RuntimeUsage = RuntimeUsage()
+    tool_authorizations: tuple[ToolAuthorization, ...] = ()
 
 
 @runtime_checkable
@@ -44,9 +65,9 @@ class ModelProvider(Protocol):
 
 @runtime_checkable
 class ToolProvider(Protocol):
-    """Resolves allowlisted tool names for a specific runtime."""
+    """Authorizes and resolves tools for one immutable AgentDefinition."""
 
-    def resolve_tools(self, tool_names: Sequence[str]) -> list[Any]: ...
+    def resolve_tools(self, definition: AgentDefinition) -> ResolvedTools: ...
 
 
 @runtime_checkable

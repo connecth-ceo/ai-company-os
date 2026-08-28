@@ -354,6 +354,16 @@ async def execute_delegation(
             "delegated_role": definition.key,
             "agent_version": definition.version,
             "policy_snapshot_version": delegation.policy_snapshot.get("version"),
+            "tool_authorizations": [
+                {
+                    "tool_name": item.tool_name,
+                    "agent_key": item.agent_key,
+                    "risk": item.risk,
+                    "required_permissions": list(item.required_permissions),
+                    "invocation_observed": item.invocation_observed,
+                }
+                for item in result.tool_authorizations
+            ],
         }
         run.input_tokens = result.usage.input_tokens
         run.output_tokens = result.usage.output_tokens
@@ -375,6 +385,22 @@ async def execute_delegation(
             execution_succeeded=True,
             now=finished,
         )
+        for authorization in result.tool_authorizations:
+            add_audit_event(
+                session,
+                tenant_id=delegation.tenant_id,
+                actor=authorization.agent_key,
+                action="tool.access_authorized",
+                resource_type="delegation",
+                resource_id=delegation.id,
+                details={
+                    "task_run_id": run.id,
+                    "tool_name": authorization.tool_name,
+                    "risk": authorization.risk,
+                    "required_permissions": list(authorization.required_permissions),
+                    "invocation_observed": authorization.invocation_observed,
+                },
+            )
         add_audit_event(
             session,
             tenant_id=delegation.tenant_id,

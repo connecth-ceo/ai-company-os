@@ -13,6 +13,7 @@
 - PostgreSQL 기반 업무·기억·의사결정·지식·승인 영속화
 - Celery/Redis 백그라운드 작업
 - OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
+- 중앙 Tool Gateway를 통한 읽기 전용 웹 검색 권한 검증과 감사 메타데이터
 - Docker Compose 로컬/배포 기준 구성
 - API 키 인증, 회사별 데이터 격리, 중복 요청 방지
 - 실행 재시도·시간 제한·토큰 사용량·감사 이벤트
@@ -96,6 +97,9 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 [docs/PROACTIVE_BRIEFING_DELIVERY_KO.md](docs/PROACTIVE_BRIEFING_DELIVERY_KO.md), 구현·검증 상태는
 [docs/PROACTIVE_BRIEFING_DELIVERY_COMPLETION_REPORT_KO.md](docs/PROACTIVE_BRIEFING_DELIVERY_COMPLETION_REPORT_KO.md)에
 구분해 기록했습니다.
+도구 등록·권한·위험 차단과 감사 의미는
+[docs/TOOL_GATEWAY_KO.md](docs/TOOL_GATEWAY_KO.md), 구현·검증 결과는
+[docs/TOOL_GATEWAY_COMPLETION_REPORT_KO.md](docs/TOOL_GATEWAY_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
