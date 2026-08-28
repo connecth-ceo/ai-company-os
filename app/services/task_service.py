@@ -5,11 +5,16 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.orchestrator import orchestrate
+from app.agents.orchestrator import explicit_workflow, orchestrate
 from app.core.config import get_settings
-from app.models import Approval, KnowledgeItem, Task, TaskRun, TaskStatus
+from app.models import Approval, KnowledgeItem, Task, TaskRun, TaskStatus, WorkflowRun
 from app.services.audit import add_audit_event
 from app.services.company_context import build_company_context
+from app.workflows.catalog import (
+    build_execution_plan,
+    ensure_workflow_definitions,
+    get_workflow_template,
+)
 
 
 class TaskExecutionError(RuntimeError):
@@ -65,6 +70,18 @@ async def execute_task(
             interrupted_run.status = TaskStatus.FAILED
             interrupted_run.feedback = "Recovered after background worker redelivery"
             interrupted_run.finished_at = datetime.now(UTC)
+        if running_runs:
+            interrupted_workflows = list(
+                await session.scalars(
+                    select(WorkflowRun).where(
+                        WorkflowRun.task_run_id.in_([item.id for item in running_runs])
+                    )
+                )
+            )
+            for interrupted_workflow in interrupted_workflows:
+                interrupted_workflow.status = "failed"
+                interrupted_workflow.error = "Recovered after background worker redelivery"
+                interrupted_workflow.finished_at = datetime.now(UTC)
         add_audit_event(
             session,
             tenant_id=task.tenant_id,
@@ -79,6 +96,30 @@ async def execute_task(
     attempt = int((await session.scalar(attempt_query)) or 0) + 1
     run = TaskRun(task_id=task.id, status=TaskStatus.RUNNING, attempt=attempt)
     session.add(run)
+    await session.flush()
+    settings = get_settings()
+    selected_workflow = explicit_workflow(task.request)
+    template = get_workflow_template(selected_workflow)
+    definitions = await ensure_workflow_definitions(session)
+    definition = definitions[template["workflow_key"]]
+    execution_plan = build_execution_plan(
+        selected_workflow,
+        max_reworks=settings.review_max_reworks,
+        provider=settings.ai_provider,
+        model=settings.openai_model,
+    )
+    workflow_run = WorkflowRun(
+        tenant_id=task.tenant_id,
+        task_id=task.id,
+        task_run_id=run.id,
+        definition_id=definition.id,
+        workflow_key=template["workflow_key"],
+        workflow_version=template["version"],
+        status="running",
+        definition_snapshot=template,
+        execution_plan=execution_plan,
+    )
+    session.add(workflow_run)
     add_audit_event(
         session,
         tenant_id=task.tenant_id,
@@ -86,14 +127,17 @@ async def execute_task(
         action="task.started",
         resource_type="task",
         resource_id=task.id,
-        details={"attempt": attempt},
+        details={
+            "attempt": attempt,
+            "workflow_key": template["workflow_key"],
+            "workflow_version": template["version"],
+        },
     )
     await session.commit()
 
     started = time.perf_counter()
     caught: Exception | None = None
     try:
-        settings = get_settings()
         company_context = await build_company_context(session, task.tenant_id)
         outcome = await asyncio.wait_for(
             orchestrate(task.request, settings, company_context),
@@ -110,6 +154,15 @@ async def execute_task(
         run.total_tokens = outcome.total_tokens
         run.finished_at = datetime.now(UTC)
         run.duration_ms = round((time.perf_counter() - started) * 1000)
+        workflow_run.status = "completed"
+        workflow_run.result_summary = {
+            "selected_workflow": outcome.workflow,
+            "verdict": outcome.verdict.value,
+            "rework_count": outcome.rework_count,
+            "total_tokens": outcome.total_tokens,
+            "completed_steps": [step["key"] for step in execution_plan["steps"]],
+        }
+        workflow_run.finished_at = run.finished_at
         existing_knowledge = await session.scalar(
             select(KnowledgeItem.id).where(
                 KnowledgeItem.tenant_id == task.tenant_id,
@@ -165,7 +218,13 @@ async def execute_task(
             action="task.completed",
             resource_type="task",
             resource_id=task.id,
-            details={"attempt": attempt, "total_tokens": outcome.total_tokens},
+            details={
+                "attempt": attempt,
+                "total_tokens": outcome.total_tokens,
+                "workflow_run_id": workflow_run.id,
+                "workflow_key": workflow_run.workflow_key,
+                "workflow_version": workflow_run.workflow_version,
+            },
         )
     except Exception as exc:
         caught = exc
@@ -175,6 +234,9 @@ async def execute_task(
         run.feedback = task.error
         run.finished_at = datetime.now(UTC)
         run.duration_ms = round((time.perf_counter() - started) * 1000)
+        workflow_run.status = "failed"
+        workflow_run.error = task.error
+        workflow_run.finished_at = run.finished_at
         add_audit_event(
             session,
             tenant_id=task.tenant_id,
@@ -182,7 +244,13 @@ async def execute_task(
             action="task.failed",
             resource_type="task",
             resource_id=task.id,
-            details={"attempt": attempt, "error": task.error},
+            details={
+                "attempt": attempt,
+                "error": task.error,
+                "workflow_run_id": workflow_run.id,
+                "workflow_key": workflow_run.workflow_key,
+                "workflow_version": workflow_run.workflow_version,
+            },
         )
     await session.commit()
     if caught is None and task.source == "telegram" and task.external_ref:

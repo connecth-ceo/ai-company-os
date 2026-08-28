@@ -53,6 +53,35 @@ class TaskRead(ORMModel):
     updated_at: datetime
 
 
+class WorkflowDefinitionRead(ORMModel):
+    id: str
+    workflow_key: str
+    version: str
+    name: str
+    description: str
+    definition: dict
+    checksum: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowRunRead(ORMModel):
+    id: str
+    tenant_id: str
+    task_id: str
+    task_run_id: str
+    workflow_key: str
+    workflow_version: str
+    status: str
+    definition_snapshot: dict
+    execution_plan: dict
+    result_summary: dict
+    error: str | None
+    started_at: datetime
+    finished_at: datetime | None
+
+
 class TaskRunRead(ORMModel):
     id: str
     task_id: str
@@ -68,6 +97,7 @@ class TaskRunRead(ORMModel):
     duration_ms: int | None
     started_at: datetime
     finished_at: datetime | None
+    workflow_run: WorkflowRunRead | None = None
 
 
 class TaskDetail(TaskRead):

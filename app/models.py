@@ -67,6 +67,22 @@ class Project(Base, TimestampMixin):
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
 
 
+class WorkflowDefinition(Base, TimestampMixin):
+    __tablename__ = "workflow_definitions"
+    __table_args__ = (UniqueConstraint("workflow_key", "version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workflow_key: Mapped[str] = mapped_column(String(100), index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSON)
+    checksum: Mapped[str] = mapped_column(String(64))
+    active: Mapped[bool] = mapped_column(default=True, index=True)
+
+    runs: Mapped[list["WorkflowRun"]] = relationship(back_populates="definition")
+
+
 class Task(Base, TimestampMixin):
     __tablename__ = "tasks"
     __table_args__ = (
@@ -126,6 +142,36 @@ class TaskRun(Base, TimestampMixin):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     task: Mapped[Task] = relationship(back_populates="runs")
+    workflow_run: Mapped["WorkflowRun | None"] = relationship(
+        back_populates="task_run", uselist=False
+    )
+
+
+class WorkflowRun(Base, TimestampMixin):
+    __tablename__ = "workflow_runs"
+    __table_args__ = (UniqueConstraint("task_run_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    task_run_id: Mapped[str] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), index=True
+    )
+    definition_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_definitions.id", ondelete="RESTRICT"), index=True
+    )
+    workflow_key: Mapped[str] = mapped_column(String(100), index=True)
+    workflow_version: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(40), default="running", index=True)
+    definition_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    execution_plan: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    definition: Mapped[WorkflowDefinition] = relationship(back_populates="runs")
+    task_run: Mapped[TaskRun] = relationship(back_populates="workflow_run")
 
 
 class Memory(Base, TimestampMixin):

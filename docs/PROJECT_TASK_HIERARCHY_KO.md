@@ -92,5 +92,5 @@ Content-Type: application/json
 - Project 수정·삭제 UI.
 - Task 관계 변경 API.
 
-다음 개발 단위는 기존 고정 V0.5 실행 흐름을 바꾸지 않고 실행 내용을 버전 있는 데이터로 기록하는
-**Workflow Recording Layer**다.
+후속 개발 단위인 **Workflow Recording Layer**는 완료됐다. 다음 단계는 이 관계와 실행 기록을 기반으로
+위임 깊이·개수·순환을 제한하는 **Delegation Guardrails**다.

@@ -17,6 +17,9 @@ from app.models import (
     Memory,
     Project,
     Task,
+    TaskRun,
+    WorkflowDefinition,
+    WorkflowRun,
 )
 from app.schemas import (
     ApprovalCreate,
@@ -35,9 +38,12 @@ from app.schemas import (
     TaskCreate,
     TaskDetail,
     TaskRead,
+    WorkflowDefinitionRead,
+    WorkflowRunRead,
 )
 from app.services.audit import add_audit_event
 from app.services.task_service import execute_task_with_new_session
+from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
 
@@ -174,7 +180,7 @@ async def get_task(
     query = (
         select(Task)
         .where(Task.id == task_id, Task.tenant_id == context.tenant_id)
-        .options(selectinload(Task.runs))
+        .options(selectinload(Task.runs).selectinload(TaskRun.workflow_run))
     )
     task = (await session.scalars(query)).first()
     if task is None:
@@ -230,6 +236,35 @@ async def run_task(
         status=task.status,
         execution_mode=settings.task_execution_mode,
     )
+
+
+@router.get("/workflow-definitions", response_model=list[WorkflowDefinitionRead])
+async def list_workflow_definitions(
+    session: AsyncSession = Depends(get_session),
+    _: TenantContext = Depends(get_tenant_context),
+) -> list[WorkflowDefinition]:
+    await ensure_workflow_definitions(session)
+    await session.commit()
+    query = select(WorkflowDefinition).order_by(
+        WorkflowDefinition.workflow_key, WorkflowDefinition.version
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/workflow-runs/{workflow_run_id}", response_model=WorkflowRunRead)
+async def get_workflow_run(
+    workflow_run_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> WorkflowRun:
+    query = select(WorkflowRun).where(
+        WorkflowRun.id == workflow_run_id,
+        WorkflowRun.tenant_id == context.tenant_id,
+    )
+    workflow_run = (await session.scalars(query)).first()
+    if workflow_run is None:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    return workflow_run
 
 
 @router.post("/memories", response_model=MemoryRead, status_code=201)
