@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from app.agents.registry import UnknownAgentError
 from app.core.config import Settings
 from app.models import Approval, ApprovalStatus, Delegation, Task, TaskStatus
 from app.schemas import DelegatedTaskCreate
+from app.services.ai_costs import estimate_max_cost_usd, require_model_pricing
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,13 +132,28 @@ async def create_delegation(
                 "budget_limit", f"{name} exceeds the configured delegation maximum"
             )
 
+    try:
+        pricing = require_model_pricing(
+            definition.model_policy.provider,
+            definition.model_policy.model,
+        )
+    except ValueError as exc:
+        raise DelegationRejected("pricing_unavailable", str(exc)) from exc
+    estimated_max_cost = estimate_max_cost_usd(pricing, payload.token_budget)
+    if estimated_max_cost > Decimal(str(payload.cost_budget_usd)):
+        raise DelegationRejected(
+            "cost_budget_too_small",
+            "cost_budget_usd is below the conservative estimate for this token budget "
+            f"(${estimated_max_cost:.8f})",
+        )
+
     approval_gate = delegation_approval_gate(
         delegated_role=definition.key,
         cost_budget_usd=payload.cost_budget_usd,
         settings=settings,
     )
     policy_snapshot = {
-        "version": "1.1.0",
+        "version": "1.2.0",
         "max_depth": settings.delegation_max_depth,
         "max_children": settings.delegation_max_children,
         "depth": depth,
@@ -148,6 +165,12 @@ async def create_delegation(
         "permissions": list(definition.permissions),
         "approval_policy": definition.approval_policy,
         "approval_gate": approval_gate,
+        "pricing": {
+            "version": pricing.version,
+            "source_url": pricing.source_url,
+            "estimated_max_cost_usd": str(estimated_max_cost),
+            "calculation": "conservative_upper_bound",
+        },
         "budget": {
             "token_budget": payload.token_budget,
             "timeout_seconds": payload.timeout_seconds,
@@ -197,6 +220,9 @@ async def create_delegation(
         token_budget=payload.token_budget,
         timeout_seconds=payload.timeout_seconds,
         cost_budget_usd=payload.cost_budget_usd,
+        pricing_version=pricing.version,
+        estimated_max_cost_usd=estimated_max_cost,
+        reserved_cost_usd=0,
         policy_snapshot=policy_snapshot,
         approval_id=approval.id if approval else None,
     )

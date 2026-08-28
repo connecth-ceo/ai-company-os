@@ -5,13 +5,20 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.contracts import AgentRunResult, AgentRuntime
+from app.agents.contracts import AgentRunResult, AgentRuntime, RuntimeUsage
 from app.agents.operational_registry import build_operational_agent_registry
 from app.agents.registry import UnknownAgentError
 from app.agents.runtimes import OpenAIAgentsRuntime
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import Approval, ApprovalStatus, Delegation, Task, TaskRun, TaskStatus
+from app.services.ai_costs import (
+    AICostControlError,
+    finalize_delegation_cost,
+    release_delegation_cost_reservation,
+    reserve_delegation_cost,
+    validate_delegation_cost_ceiling,
+)
 from app.services.audit import add_audit_event
 from app.services.company_context import build_company_context
 from app.services.delegation import delegation_approval_gate
@@ -177,6 +184,10 @@ async def validate_delegation_execution(
         raise DelegationExecutionRejected(
             "budget_limit", "Delegation budget exceeds the current configured maximum"
         )
+    try:
+        validate_delegation_cost_ceiling(delegation)
+    except AICostControlError as exc:
+        raise DelegationExecutionRejected(exc.code, exc.detail) from exc
     estimated_input_tokens = max(1, (len(child.request) + 3) // 4)
     if estimated_input_tokens >= delegation.token_budget:
         raise DelegationExecutionRejected(
@@ -202,6 +213,10 @@ async def dispatch_delegation(
         raise DelegationExecutionRejected("delegation_missing", "Delegation no longer exists")
     delegation = locked
     _, child = await validate_delegation_execution(session, delegation, settings)
+    try:
+        reservation = await reserve_delegation_cost(session, delegation, settings)
+    except AICostControlError as exc:
+        raise DelegationExecutionRejected(exc.code, exc.detail) from exc
     delegation.status = "dispatched"
     delegation.error = None
     child.status = TaskStatus.DISPATCHED
@@ -213,7 +228,12 @@ async def dispatch_delegation(
         action="delegation.execution_dispatched",
         resource_type="delegation",
         resource_id=delegation.id,
-        details={"child_task_id": child.id, "delegated_role": delegation.delegated_role},
+        details={
+            "child_task_id": child.id,
+            "delegated_role": delegation.delegated_role,
+            "reserved_cost_usd": str(reservation),
+            "pricing_version": delegation.pricing_version,
+        },
     )
     await session.commit()
     return child
@@ -250,6 +270,7 @@ async def execute_delegation(
     try:
         _, child = await validate_delegation_execution_after_dispatch(session, delegation, settings)
     except DelegationExecutionRejected as exc:
+        await release_delegation_cost_reservation(session, delegation, settings)
         delegation.status = "failed"
         delegation.error = exc.detail
         delegation.finished_at = datetime.now(UTC)
@@ -294,6 +315,8 @@ async def execute_delegation(
 
     started = time.perf_counter()
     caught: Exception | None = None
+    result: AgentRunResult | None = None
+    provider_called = False
     try:
         company_context = await build_company_context(session, delegation.tenant_id)
         context = company_context or "No stored company context is available."
@@ -309,6 +332,7 @@ async def execute_delegation(
         max_output_tokens = delegation.token_budget - estimated_input_tokens
         if max_output_tokens < 1:
             raise DelegationExecutionError("Token budget is too small after adding safe context")
+        provider_called = True
         result = await asyncio.wait_for(
             runtime.run(definition, input_text, max_output_tokens=max_output_tokens),
             timeout=delegation.timeout_seconds,
@@ -337,6 +361,15 @@ async def execute_delegation(
         delegation.total_tokens = result.usage.total_tokens
         delegation.duration_ms = duration_ms
         delegation.finished_at = finished
+        cost_entry = await finalize_delegation_cost(
+            session,
+            delegation,
+            run,
+            settings,
+            usage=result.usage,
+            execution_succeeded=True,
+            now=finished,
+        )
         add_audit_event(
             session,
             tenant_id=delegation.tenant_id,
@@ -344,7 +377,12 @@ async def execute_delegation(
             action="delegation.execution_completed",
             resource_type="delegation",
             resource_id=delegation.id,
-            details={"task_run_id": run.id, "total_tokens": result.usage.total_tokens},
+            details={
+                "task_run_id": run.id,
+                "total_tokens": result.usage.total_tokens,
+                "estimated_cost_usd": str(cost_entry.estimated_cost_usd),
+                "cost_calculation_status": cost_entry.calculation_status,
+            },
         )
     except Exception as exc:
         caught = exc
@@ -361,6 +399,18 @@ async def execute_delegation(
         delegation.error = message
         delegation.duration_ms = duration_ms
         delegation.finished_at = finished
+        usage = (
+            result.usage if result is not None else (None if provider_called else RuntimeUsage())
+        )
+        cost_entry = await finalize_delegation_cost(
+            session,
+            delegation,
+            run,
+            settings,
+            usage=usage,
+            execution_succeeded=False,
+            now=finished,
+        )
         add_audit_event(
             session,
             tenant_id=delegation.tenant_id,
@@ -368,7 +418,12 @@ async def execute_delegation(
             action="delegation.execution_failed",
             resource_type="delegation",
             resource_id=delegation.id,
-            details={"task_run_id": run.id, "error_type": type(exc).__name__},
+            details={
+                "task_run_id": run.id,
+                "error_type": type(exc).__name__,
+                "estimated_cost_usd": str(cost_entry.estimated_cost_usd),
+                "cost_calculation_status": cost_entry.calculation_status,
+            },
         )
     await session.commit()
     if caught is not None and raise_on_failure:

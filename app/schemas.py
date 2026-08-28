@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -129,6 +129,11 @@ class DelegationRead(ORMModel):
     token_budget: int
     timeout_seconds: int
     cost_budget_usd: float
+    pricing_version: str | None
+    estimated_max_cost_usd: float
+    reserved_cost_usd: float
+    cost_reservation_period_start: date | None
+    actual_estimated_cost_usd: float | None
     policy_snapshot: dict
     approval_id: str | None
     task_run_id: str | None
@@ -143,6 +148,39 @@ class DelegationRead(ORMModel):
     finished_at: datetime | None
     error: str | None
     created_at: datetime
+
+
+class AICostLedgerRead(ORMModel):
+    id: str
+    tenant_id: str
+    delegation_id: str
+    task_run_id: str
+    provider: str
+    model: str
+    pricing_version: str
+    calculation_status: str
+    currency: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    input_rate_per_million_usd: float
+    output_rate_per_million_usd: float
+    estimated_cost_usd: float
+    provider_billed_cost_usd: float | None
+    occurred_at: datetime
+
+
+class AICostSummaryRead(BaseModel):
+    tenant_id: str
+    provider: str
+    period_start: date
+    currency: str
+    budget_usd: float
+    reserved_usd: float
+    estimated_spend_usd: float
+    uncertain_spend_usd: float
+    remaining_usd: float
+    pricing_is_estimate: bool
 
 
 class DelegationDispatchResponse(BaseModel):

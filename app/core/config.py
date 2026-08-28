@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.6-luna"
     openai_tracing_enabled: bool = False
     openai_store_responses: bool = False
+    openai_monthly_budget_usd: float = Field(default=10.0, gt=0, le=100_000)
     review_max_reworks: int = Field(default=1, ge=0, le=3)
     task_max_attempts: int = Field(default=3, ge=1, le=10)
     task_timeout_seconds: int = Field(default=600, ge=30, le=3600)

@@ -1,8 +1,10 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from app.core.config import Settings
 from app.db import SessionLocal
 from app.models import Delegation, Task, TaskRun, TaskStatus
+from app.services.delegation_execution import dispatch_delegation
 
 
 def _create_delegation(client):
@@ -34,6 +36,17 @@ async def _make_stale_dispatched(delegation_id: str) -> None:
         delegation.updated_at = datetime.now(UTC) - timedelta(minutes=10)
         child.status = TaskStatus.DISPATCHED
         await session.commit()
+
+
+async def _dispatch(delegation_id: str) -> None:
+    async with SessionLocal() as session:
+        delegation = await session.get(Delegation, delegation_id)
+        await dispatch_delegation(
+            session,
+            delegation,
+            Settings(ai_provider="mock"),
+            actor="test",
+        )
 
 
 async def _make_stale_running(delegation_id: str) -> str:
@@ -137,3 +150,36 @@ def test_recovery_scan_is_tenant_isolated(client):
     ).json()
     assert hidden["scanned"] == 0
     assert client.get(f"/api/v1/delegations/{delegation['id']}").json()["status"] == ("dispatched")
+
+
+def test_recovery_releases_pre_start_reservation_and_quarantines_running_cost(client):
+    before_start = _create_delegation(client)
+    asyncio.run(_dispatch(before_start["id"]))
+    asyncio.run(_make_stale_dispatched(before_start["id"]))
+
+    reset = client.post(
+        "/api/v1/delegations/recover-stale",
+        json={"dry_run": False},
+    ).json()
+    after_reset = client.get(f"/api/v1/delegations/{before_start['id']}").json()
+    assert reset["reset_for_retry"] == 1
+    assert after_reset["reserved_cost_usd"] == 0
+
+    running = _create_delegation(client)
+    asyncio.run(_dispatch(running["id"]))
+    asyncio.run(_make_stale_running(running["id"]))
+    quarantined = client.post(
+        "/api/v1/delegations/recover-stale",
+        json={"dry_run": False},
+    ).json()
+    detail = client.get(f"/api/v1/delegations/{running['id']}").json()
+    ledger = client.get("/api/v1/ai-costs/ledger").json()
+    summary = client.get("/api/v1/ai-costs/current-month").json()
+
+    assert quarantined["quarantined"] == 1
+    assert detail["reserved_cost_usd"] == 0
+    assert detail["actual_estimated_cost_usd"] == 0.0024
+    assert ledger[0]["calculation_status"] == "uncertain_upper_bound"
+    assert ledger[0]["estimated_cost_usd"] == 0.0024
+    assert summary["reserved_usd"] == 0
+    assert summary["uncertain_spend_usd"] == 0.0024

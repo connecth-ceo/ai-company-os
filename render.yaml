@@ -32,6 +32,8 @@ services:
         value: "false"
       - key: OPENAI_STORE_RESPONSES
         value: "false"
+      - key: OPENAI_MONTHLY_BUDGET_USD
+        value: "10.0"
       - key: DELEGATION_APPROVAL_COST_THRESHOLD_USD
         value: "1.0"
       - key: DELEGATION_APPROVAL_ROLES
@@ -94,6 +96,11 @@ services:
         value: "false"
       - key: OPENAI_STORE_RESPONSES
         value: "false"
+      - key: OPENAI_MONTHLY_BUDGET_USD
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: OPENAI_MONTHLY_BUDGET_USD
       - key: DELEGATION_APPROVAL_COST_THRESHOLD_USD
         fromService:
           type: web

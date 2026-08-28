@@ -1,11 +1,12 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -198,6 +199,13 @@ class Delegation(Base, TimestampMixin):
     token_budget: Mapped[int] = mapped_column(Integer)
     timeout_seconds: Mapped[int] = mapped_column(Integer)
     cost_budget_usd: Mapped[float] = mapped_column(Numeric(10, 4))
+    pricing_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    estimated_max_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
+    reserved_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
+    cost_reservation_period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actual_estimated_cost_usd: Mapped[float | None] = mapped_column(
+        Numeric(14, 8), nullable=True
+    )
     policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     approval_id: Mapped[str | None] = mapped_column(
         ForeignKey("approvals.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
@@ -215,6 +223,66 @@ class Delegation(Base, TimestampMixin):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AIMonthlyBudget(Base, TimestampMixin):
+    __tablename__ = "ai_monthly_budgets"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "provider", "period_start"),
+        CheckConstraint("budget_usd >= 0", name="ck_ai_monthly_budget_nonnegative"),
+        CheckConstraint("reserved_usd >= 0", name="ck_ai_monthly_reserved_nonnegative"),
+        CheckConstraint(
+            "estimated_spend_usd >= 0", name="ck_ai_monthly_estimated_spend_nonnegative"
+        ),
+        CheckConstraint(
+            "uncertain_spend_usd >= 0", name="ck_ai_monthly_uncertain_spend_nonnegative"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    provider: Mapped[str] = mapped_column(String(80), index=True)
+    period_start: Mapped[date] = mapped_column(Date, index=True)
+    budget_usd: Mapped[float] = mapped_column(Numeric(14, 8))
+    reserved_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
+    estimated_spend_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
+    uncertain_spend_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
+
+
+class AICostLedgerEntry(Base):
+    __tablename__ = "ai_cost_ledger"
+    __table_args__ = (
+        UniqueConstraint("delegation_id"),
+        UniqueConstraint("task_run_id"),
+        CheckConstraint("input_tokens >= 0", name="ck_ai_cost_input_tokens_nonnegative"),
+        CheckConstraint("output_tokens >= 0", name="ck_ai_cost_output_tokens_nonnegative"),
+        CheckConstraint("total_tokens >= 0", name="ck_ai_cost_total_tokens_nonnegative"),
+        CheckConstraint("estimated_cost_usd >= 0", name="ck_ai_cost_estimate_nonnegative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    delegation_id: Mapped[str] = mapped_column(
+        ForeignKey("delegations.id", ondelete="RESTRICT"), index=True
+    )
+    task_run_id: Mapped[str] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="RESTRICT"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), index=True)
+    model: Mapped[str] = mapped_column(String(160), index=True)
+    pricing_version: Mapped[str] = mapped_column(String(80))
+    calculation_status: Mapped[str] = mapped_column(String(40), index=True)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    input_rate_per_million_usd: Mapped[float] = mapped_column(Numeric(14, 8))
+    output_rate_per_million_usd: Mapped[float] = mapped_column(Numeric(14, 8))
+    estimated_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8))
+    provider_billed_cost_usd: Mapped[float | None] = mapped_column(
+        Numeric(14, 8), nullable=True
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Memory(Base, TimestampMixin):

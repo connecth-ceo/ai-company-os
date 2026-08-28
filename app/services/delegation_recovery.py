@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.models import Delegation, Task, TaskRun, TaskStatus
+from app.services.ai_costs import (
+    finalize_delegation_cost,
+    release_delegation_cost_reservation,
+)
 from app.services.audit import add_audit_event
 
 
@@ -99,6 +103,7 @@ async def recover_stale_delegations(
             continue
 
         if action == "reset_for_retry":
+            await release_delegation_cost_reservation(session, delegation, settings)
             delegation.status = "created"
             delegation.error = "Recovered stale dispatch before runtime start"
             if child is not None:
@@ -131,6 +136,15 @@ async def recover_stale_delegations(
                     task_run.feedback = message
                     task_run.finished_at = current_time
                     task_run.duration_ms = delegation.duration_ms
+                    await finalize_delegation_cost(
+                        session,
+                        delegation,
+                        task_run,
+                        settings,
+                        usage=None,
+                        execution_succeeded=False,
+                        now=current_time,
+                    )
             audit_action = "delegation.stale_execution_quarantined"
         add_audit_event(
             session,

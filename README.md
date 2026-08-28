@@ -23,6 +23,7 @@
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
 - 민감 역할·고비용 AI 위임을 대표 승인 전 실행하지 않는 승인 게이트
 - Worker 정체 위임의 dry-run 진단, 안전 복구, 비용 중복 방지 격리
+- 실행 전 비용 예약, 실행별 추정 비용 원장, 월 OpenAI 예산 초과 차단
 - CEO Desk에서 회사 기억과 대표 결정을 직접 기록
 - Alembic 데이터베이스 마이그레이션
 - Render용 클라우드 Blueprint
@@ -71,6 +72,10 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 구현·검증 완료 범위와 아직 운영 자격증명이 필요한 항목은
 [docs/DELEGATED_ROLE_EXECUTION_COMPLETION_REPORT_KO.md](docs/DELEGATED_ROLE_EXECUTION_COMPLETION_REPORT_KO.md)에
 구분해 기록했습니다.
+실행별 비용 추정과 월 예산 통제는
+[docs/AI_COST_CONTROL_KO.md](docs/AI_COST_CONTROL_KO.md)에 설명되어 있습니다.
+구현·검증 범위와 배포 후 남은 확인은
+[docs/AI_COST_CONTROL_COMPLETION_REPORT_KO.md](docs/AI_COST_CONTROL_COMPLETION_REPORT_KO.md)에 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

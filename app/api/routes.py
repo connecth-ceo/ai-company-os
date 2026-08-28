@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
 from app.models import (
+    AICostLedgerEntry,
     Approval,
     ApprovalStatus,
     AuditEvent,
@@ -23,6 +24,8 @@ from app.models import (
     WorkflowRun,
 )
 from app.schemas import (
+    AICostLedgerRead,
+    AICostSummaryRead,
     ApprovalCreate,
     ApprovalDecision,
     ApprovalRead,
@@ -47,6 +50,10 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
+from app.services.ai_costs import (
+    get_current_month_cost_summary,
+    release_delegation_cost_reservation,
+)
 from app.services.audit import add_audit_event
 from app.services.delegation import DelegationRejected, create_delegation
 from app.services.delegation_execution import (
@@ -59,6 +66,35 @@ from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/ai-costs/current-month", response_model=AICostSummaryRead)
+async def current_month_ai_costs(
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> dict[str, object]:
+    return await get_current_month_cost_summary(
+        session,
+        tenant_id=context.tenant_id,
+        settings=settings,
+    )
+
+
+@router.get("/ai-costs/ledger", response_model=list[AICostLedgerRead])
+async def list_ai_cost_ledger(
+    limit: int = Query(default=100, ge=1, le=500),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[AICostLedgerEntry]:
+    return list(
+        await session.scalars(
+            select(AICostLedgerEntry)
+            .where(AICostLedgerEntry.tenant_id == context.tenant_id)
+            .order_by(AICostLedgerEntry.occurred_at.desc())
+            .limit(limit)
+        )
+    )
 
 
 async def require_task(session: AsyncSession, task_id: str, tenant_id: str) -> Task:
@@ -353,6 +389,7 @@ async def run_delegation(
         try:
             execute_delegation_job.delay(delegation.id)
         except Exception as exc:
+            await release_delegation_cost_reservation(session, delegation, settings)
             delegation.status = "created"
             delegation.error = f"Queue dispatch failed: {type(exc).__name__}"
             child.status = child.status.QUEUED
