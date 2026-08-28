@@ -26,8 +26,8 @@ $headers = @{
 try {
     Write-Host "1/3 Checking deployed schema and service readiness..."
     $ready = Invoke-RestMethod -Method Get -Uri "$BaseUrl/ready"
-    if ($ready.status -ne "ready" -or $ready.components.schema -ne "e1f3a5c7d9b2") {
-        throw "The service is not ready on briefing delivery schema e1f3a5c7d9b2."
+    if ($ready.status -ne "ready" -or $ready.components.schema -ne "f2a4b6c8d0e2") {
+        throw "The service is not ready on current schema f2a4b6c8d0e2."
     }
 
     Write-Host "2/3 Checking safe schedule configuration..."

@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
 from app.models import (
+    ActionIntent,
     AICostLedgerEntry,
     Approval,
     ApprovalStatus,
@@ -33,6 +34,8 @@ from app.models import (
     WorkflowRun,
 )
 from app.schemas import (
+    ActionIntentCreate,
+    ActionIntentRead,
     AICostLedgerRead,
     AICostSummaryRead,
     ApprovalCreate,
@@ -67,7 +70,7 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
-from app.services import attention, commitments, decision_memory
+from app.services import action_intents, attention, commitments, decision_memory
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -84,6 +87,64 @@ from app.services.task_service import execute_task_with_new_session
 from app.workflows.catalog import ensure_workflow_definitions
 
 router = APIRouter(prefix="/api/v1")
+
+
+def action_intent_rejection(error: action_intents.ActionIntentRejected) -> HTTPException:
+    return HTTPException(status_code=409, detail={"code": error.code, "message": error.detail})
+
+
+@router.post("/action-intents", response_model=ActionIntentRead, status_code=201)
+async def create_action_intent(
+    payload: ActionIntentCreate,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ActionIntent:
+    if payload.task_id:
+        await require_task(session, payload.task_id, context.tenant_id)
+    try:
+        item = await action_intents.create_action_intent(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except action_intents.ActionIntentRejected as exc:
+        raise action_intent_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
+@router.get("/action-intents", response_model=list[ActionIntentRead])
+async def list_action_intents(
+    limit: int = Query(default=100, ge=1, le=500),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[ActionIntent]:
+    query = (
+        select(ActionIntent)
+        .where(ActionIntent.tenant_id == context.tenant_id)
+        .order_by(ActionIntent.created_at.desc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/action-intents/{intent_id}", response_model=ActionIntentRead)
+async def get_action_intent(
+    intent_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ActionIntent:
+    item = await session.scalar(
+        select(ActionIntent).where(
+            ActionIntent.id == intent_id,
+            ActionIntent.tenant_id == context.tenant_id,
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Action intent not found")
+    return item
 
 
 @router.get("/tool-catalog", response_model=list[ToolDescriptorRead])
@@ -979,6 +1040,20 @@ async def decide_approval(
         raise HTTPException(status_code=404, detail="Approval not found")
     if item.status != ApprovalStatus.PENDING:
         raise HTTPException(status_code=409, detail="Approval has already been decided")
+    try:
+        await action_intents.decide_linked_action_intent(
+            session,
+            approval=item,
+            tenant_id=context.tenant_id,
+            approved=payload.approved,
+            actor=payload.decided_by,
+        )
+    except action_intents.ActionIntentRejected as exc:
+        if exc.code == "intent_expired":
+            await session.commit()
+        else:
+            await session.rollback()
+        raise action_intent_rejection(exc) from exc
     item.status = ApprovalStatus.APPROVED if payload.approved else ApprovalStatus.REJECTED
     item.decided_by = payload.decided_by
     item.decision_note = payload.note

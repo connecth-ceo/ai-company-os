@@ -1,8 +1,12 @@
+import json
+import re
 from datetime import date, datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import (
+    ActionIntentStatus,
     ApprovalStatus,
     AttentionKind,
     AttentionLevel,
@@ -425,6 +429,85 @@ class ApprovalRead(ORMModel):
     decision_note: str | None
     decided_at: datetime | None
     created_at: datetime
+
+
+class ActionIntentCreate(BaseModel):
+    action_type: str = Field(pattern=r"^[a-z][a-z0-9_]{1,79}$")
+    summary: str = Field(min_length=1, max_length=240)
+    reason: str = Field(min_length=1, max_length=10_000)
+    risk: str = Field(default="high", pattern="^(medium|high|critical)$")
+    payload: dict[str, Any]
+    expires_in_minutes: int = Field(default=60, ge=5, le=43_200)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=100)
+    task_id: str | None = Field(default=None, max_length=36)
+
+    @field_validator("payload")
+    @classmethod
+    def reject_secrets_and_oversized_payloads(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        forbidden = {
+            "apikey",
+            "authorization",
+            "cookie",
+            "credential",
+            "password",
+            "privatekey",
+            "secret",
+            "token",
+            "accesstoken",
+            "refreshtoken",
+        }
+
+        def inspect(value: Any, depth: int = 0) -> None:
+            if depth > 8:
+                raise ValueError("Action payload nesting cannot exceed 8 levels")
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+                    if normalized in forbidden or normalized.endswith(
+                        ("apikey", "credential", "password", "privatekey", "secret", "token")
+                    ):
+                        raise ValueError(f"Secret-like payload field is not allowed: {key}")
+                    inspect(child, depth + 1)
+            elif isinstance(value, list):
+                if len(value) > 200:
+                    raise ValueError("Action payload lists cannot exceed 200 items")
+                for child in value:
+                    inspect(child, depth + 1)
+
+        inspect(payload)
+        try:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Action payload must be valid JSON") from exc
+        if len(encoded) > 20_000:
+            raise ValueError("Action payload cannot exceed 20000 UTF-8 bytes")
+        return payload
+
+
+class ActionIntentRead(ORMModel):
+    id: str
+    tenant_id: str
+    task_id: str | None
+    approval_id: str
+    idempotency_key: str | None
+    action_type: str
+    summary: str
+    reason: str
+    risk: str
+    payload: dict[str, Any]
+    payload_hash: str
+    execution_scope: str
+    status: ActionIntentStatus
+    expires_at: datetime
+    decided_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class AuditEventRead(ORMModel):
