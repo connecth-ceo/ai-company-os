@@ -100,5 +100,15 @@ GET /api/v1/tasks/{parent_task_id}/delegations
   왕복 및 기존 Task 보존 검증.
 - PostgreSQL offline DDL에서 테이블, FK `RESTRICT`, 비용 정밀도, 인덱스, revision 갱신 검증.
 
-배포 후에는 Render PostgreSQL revision, Web `/ready`, Celery worker 연결과 API 1회 smoke test를
-확인해야 한다. smoke test는 하위 Task 생성까지만 수행하며 OpenAI 비용을 발생시키지 않아도 된다.
+## 클라우드 검증 결과
+
+- GitHub Actions CI #11 성공, commit `6f18c71`.
+- Render PostgreSQL에서 `8c2e4f6a9b10 → d4e6a8b0c2f4` migration과 pre-deploy 완료.
+- Render Web commit `6f18c71` live, `/ready 200` 확인.
+- Render Worker commit `6f18c71` live, Celery의 Redis 연결과 `ready` 확인.
+- 운영 API에서 상위 Task, guarded delegation, 하위 Task 생성 및 재조회 성공.
+- 하위 Task의 `source=delegation`, `status=queued`, depth 1 확인.
+- smoke test 중 OpenAI 업무를 실행하지 않았고 AI 호출 비용도 발생하지 않음.
+
+실제 단일 Agent 역할 라우팅과 도구 실행은 아직 의도적으로 연결하지 않았다. 이 기능에는 역할별 권한,
+승인 정책, 실제 소비 예산 원장이 함께 필요하다.
