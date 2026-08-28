@@ -1,7 +1,9 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Decision, KnowledgeItem, Memory
+from app.models import Decision, DecisionScope, DecisionStatus, KnowledgeItem, Memory
 
 
 def compact(value: str, limit: int = 1200) -> str:
@@ -15,9 +17,35 @@ async def build_company_context(
     session: AsyncSession,
     tenant_id: str,
     *,
+    task_id: str | None = None,
+    project_id: str | None = None,
+    department: str | None = None,
     per_section: int = 8,
     max_chars: int = 12_000,
 ) -> str:
+    now = datetime.now(UTC)
+    scope_conditions = [Decision.scope == DecisionScope.COMPANY]
+    if project_id:
+        scope_conditions.append(
+            and_(
+                Decision.scope == DecisionScope.PROJECT,
+                Decision.applies_to["project_id"].as_string() == project_id,
+            )
+        )
+    if task_id:
+        scope_conditions.append(
+            and_(
+                Decision.scope == DecisionScope.TASK,
+                Decision.applies_to["task_id"].as_string() == task_id,
+            )
+        )
+    if department:
+        scope_conditions.append(
+            and_(
+                Decision.scope == DecisionScope.DEPARTMENT,
+                Decision.applies_to["department"].as_string() == department,
+            )
+        )
     memory_query = (
         select(Memory)
         .where(Memory.tenant_id == tenant_id)
@@ -26,8 +54,14 @@ async def build_company_context(
     )
     decision_query = (
         select(Decision)
-        .where(Decision.tenant_id == tenant_id)
-        .order_by(Decision.created_at.desc())
+        .where(
+            Decision.tenant_id == tenant_id,
+            Decision.status == DecisionStatus.ACTIVE,
+            Decision.effective_at <= now,
+            or_(Decision.expires_at.is_(None), Decision.expires_at > now),
+            or_(*scope_conditions),
+        )
+        .order_by(Decision.effective_at.desc(), Decision.created_at.desc())
         .limit(per_section)
     )
     knowledge_query = (

@@ -31,13 +31,19 @@ async function api(path, options = {}) {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `요청 실패 (${response.status})`);
+    const detail = body.detail;
+    const message = typeof detail === "string" ? detail : detail?.message;
+    throw new Error(message || `요청 실패 (${response.status})`);
   }
   return response.json();
 }
 
 const statusLabels = {
   queued: "대기", dispatched: "전달됨", running: "진행 중", completed: "완료", failed: "실패",
+};
+
+const decisionStatusLabels = {
+  proposed: "검토 중", active: "활성", superseded: "대체됨", expired: "만료", revoked: "철회",
 };
 
 function renderTasks() {
@@ -92,7 +98,12 @@ function renderCompanyContext() {
     <div class="context-item"><strong>${escapeHtml(item.category)}</strong><p>${escapeHtml(item.content)}</p></div>
   `).join("") : '<p class="empty">저장된 기억이 없습니다.</p>';
   $("#decision-list").innerHTML = state.decisions.length ? state.decisions.slice(0, 3).map((item) => `
-    <div class="context-item"><strong>${escapeHtml(item.subject)}</strong><p>${escapeHtml(item.choice)}</p></div>
+    <div class="context-item">
+      <strong>${escapeHtml(item.subject)} <span class="decision-state ${escapeHtml(item.status)}">${escapeHtml(decisionStatusLabels[item.status] || item.status)}</span></strong>
+      <p>${escapeHtml(item.choice)}</p>
+      ${item.status === "proposed" ? `<button class="context-action" data-decision-id="${item.id}" data-decision-status="active">확정</button>` : ""}
+      ${item.status === "active" ? `<button class="context-action danger" data-decision-id="${item.id}" data-decision-status="revoked">철회</button>` : ""}
+    </div>
   `).join("") : '<p class="empty">기록된 결정이 없습니다.</p>';
   $("#knowledge-list").innerHTML = state.knowledge.length ? state.knowledge.slice(0, 3).map((item) => `
     <div class="context-item"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.content)}</p></div>
@@ -153,7 +164,16 @@ $("#approval-list").addEventListener("click", async (event) => {
 
 $("#refresh-button").addEventListener("click", loadDashboard);
 $("#add-memory-button").addEventListener("click", () => $("#memory-dialog").showModal());
-$("#add-decision-button").addEventListener("click", () => $("#decision-dialog").showModal());
+$("#add-decision-button").addEventListener("click", () => {
+  const activeCompanyDecisions = state.decisions.filter(
+    (item) => item.status === "active" && item.scope === "company",
+  );
+  $("#decision-supersedes").innerHTML = '<option value="">대체하지 않음</option>'
+    + activeCompanyDecisions.map((item) => (
+      `<option value="${item.id}">${escapeHtml(item.subject)}</option>`
+    )).join("");
+  $("#decision-dialog").showModal();
+});
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close());
 });
@@ -177,17 +197,42 @@ $("#decision-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("#decision-status").textContent = "저장 중입니다…";
   try {
+    const supersedesDecisionId = $("#decision-supersedes").value;
+    if (supersedesDecisionId && $("#decision-lifecycle-status").value !== "active") {
+      throw new Error("기존 결정을 대체하는 새 결정은 '확정 결정'으로 저장해 주세요.");
+    }
     await api("/api/v1/decisions", { method: "POST", body: JSON.stringify({
       subject: $("#decision-subject").value.trim(),
       choice: $("#decision-choice").value.trim(),
       rationale: $("#decision-rationale").value.trim(),
       decided_by: "CEO",
+      status: $("#decision-lifecycle-status").value,
+      supersedes_decision_id: supersedesDecisionId || null,
     }) });
     $("#decision-form").reset();
     $("#decision-status").textContent = "";
     $("#decision-dialog").close();
     await loadDashboard();
   } catch (error) { $("#decision-status").textContent = error.message; }
+});
+
+$("#decision-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-decision-status]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/decisions/${button.dataset.decisionId}/transition`, {
+      method: "POST",
+      body: JSON.stringify({
+        status: button.dataset.decisionStatus,
+        note: "CEO Desk에서 변경",
+      }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+  }
 });
 
 $("#settings-button").addEventListener("click", () => $("#settings-dialog").showModal());

@@ -75,6 +75,11 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .context-item:first-child { border-top: 0; padding-top: 0; }
 .context-item strong { display: block; font-size: 13px; margin-bottom: 5px; }
 .context-item p { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 0; max-height: 3.1em; overflow: hidden; }
+.decision-state { display: inline-block; margin-left: 5px; border-radius: 999px; padding: 2px 6px; background: #e7e6df; color: var(--muted); font-size: 10px; }
+.decision-state.active { background: #dff2d9; color: #25603f; }
+.decision-state.proposed { background: #fff1c8; color: #795b00; }
+.context-action { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: var(--surface); color: var(--forest); font-weight: 700; }
+.context-action.danger { color: #8a3821; }
 .activity-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .activity-item { border-left: 2px solid var(--lime); padding-left: 12px; font-size: 13px; }
 .activity-item strong { display: block; }

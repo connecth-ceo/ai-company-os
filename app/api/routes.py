@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +14,8 @@ from app.models import (
     ApprovalStatus,
     AuditEvent,
     Decision,
+    DecisionScope,
+    DecisionStatus,
     Delegation,
     KnowledgeItem,
     Memory,
@@ -32,6 +34,7 @@ from app.schemas import (
     AuditEventRead,
     DecisionCreate,
     DecisionRead,
+    DecisionTransition,
     DelegatedTaskCreate,
     DelegationDispatchResponse,
     DelegationRead,
@@ -50,6 +53,7 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
+from app.services import decision_memory
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -111,6 +115,29 @@ async def require_project(session: AsyncSession, project_id: str, tenant_id: str
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+async def require_decision(
+    session: AsyncSession,
+    decision_id: str,
+    tenant_id: str,
+) -> Decision:
+    query = select(Decision).where(
+        Decision.id == decision_id,
+        Decision.tenant_id == tenant_id,
+    )
+    item = (await session.scalars(query)).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return item
+
+
+def decision_rejection(error: decision_memory.DecisionLifecycleRejected) -> HTTPException:
+    status_code = 404 if error.code.endswith("_not_found") else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
 
 
 @router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
@@ -559,19 +586,15 @@ async def create_decision(
     session: AsyncSession = Depends(get_session),
     context: TenantContext = Depends(get_tenant_context),
 ) -> Decision:
-    if payload.task_id:
-        await require_task(session, payload.task_id, context.tenant_id)
-    item = Decision(tenant_id=context.tenant_id, **payload.model_dump())
-    session.add(item)
-    await session.flush()
-    add_audit_event(
-        session,
-        tenant_id=context.tenant_id,
-        actor=context.actor,
-        action="decision.created",
-        resource_type="decision",
-        resource_id=item.id,
-    )
+    try:
+        item = await decision_memory.create_decision(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except decision_memory.DecisionLifecycleRejected as error:
+        raise decision_rejection(error) from error
     await session.commit()
     await session.refresh(item)
     return item
@@ -579,15 +602,66 @@ async def create_decision(
 
 @router.get("/decisions", response_model=list[DecisionRead])
 async def list_decisions(
+    decision_status: DecisionStatus | None = Query(default=None, alias="status"),
+    decision_scope: DecisionScope | None = Query(default=None, alias="scope"),
+    effective_only: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     context: TenantContext = Depends(get_tenant_context),
 ) -> list[Decision]:
+    conditions = [Decision.tenant_id == context.tenant_id]
+    if decision_status is not None:
+        conditions.append(Decision.status == decision_status)
+    if decision_scope is not None:
+        conditions.append(Decision.scope == decision_scope)
+    if effective_only:
+        now = datetime.now(UTC)
+        conditions.extend(
+            [
+                Decision.status == DecisionStatus.ACTIVE,
+                Decision.effective_at <= now,
+                or_(Decision.expires_at.is_(None), Decision.expires_at > now),
+            ]
+        )
     query = (
         select(Decision)
-        .where(Decision.tenant_id == context.tenant_id)
-        .order_by(Decision.created_at.desc())
+        .where(*conditions)
+        .order_by(Decision.effective_at.desc(), Decision.created_at.desc())
+        .limit(limit)
     )
     return list(await session.scalars(query))
+
+
+@router.get("/decisions/{decision_id}", response_model=DecisionRead)
+async def get_decision(
+    decision_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Decision:
+    return await require_decision(session, decision_id, context.tenant_id)
+
+
+@router.post("/decisions/{decision_id}/transition", response_model=DecisionRead)
+async def transition_decision(
+    decision_id: str,
+    payload: DecisionTransition,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Decision:
+    item = await require_decision(session, decision_id, context.tenant_id)
+    try:
+        await decision_memory.transition_decision(
+            session,
+            item=item,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except decision_memory.DecisionLifecycleRejected as error:
+        raise decision_rejection(error) from error
+    await session.commit()
+    await session.refresh(item)
+    return item
 
 
 @router.post("/knowledge", response_model=KnowledgeRead, status_code=201)

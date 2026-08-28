@@ -138,7 +138,12 @@ async def execute_task(
     started = time.perf_counter()
     caught: Exception | None = None
     try:
-        company_context = await build_company_context(session, task.tenant_id)
+        company_context = await build_company_context(
+            session,
+            task.tenant_id,
+            task_id=task.id,
+            project_id=task.project_id,
+        )
         outcome = await asyncio.wait_for(
             orchestrate(task.request, settings, company_context),
             timeout=settings.task_timeout_seconds,

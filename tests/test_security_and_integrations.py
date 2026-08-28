@@ -10,6 +10,8 @@ def test_dashboard_and_readiness(client):
     dashboard = client.get("/")
     assert dashboard.status_code == 200
     assert "AI Company OS" in dashboard.text
+    assert 'id="decision-lifecycle-status"' in dashboard.text
+    assert 'id="decision-supersedes"' in dashboard.text
     assert dashboard.headers["X-Content-Type-Options"] == "nosniff"
     assert dashboard.headers["X-Frame-Options"] == "DENY"
     assert "default-src 'self'" in dashboard.headers["Content-Security-Policy"]

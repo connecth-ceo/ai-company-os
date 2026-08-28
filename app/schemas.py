@@ -2,7 +2,13 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import ApprovalStatus, ReviewVerdict, TaskStatus
+from app.models import (
+    ApprovalStatus,
+    DecisionScope,
+    DecisionStatus,
+    ReviewVerdict,
+    TaskStatus,
+)
 
 
 class ORMModel(BaseModel):
@@ -234,10 +240,17 @@ class MemoryRead(ORMModel):
 
 class DecisionCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=240)
-    choice: str = Field(min_length=1)
-    rationale: str = Field(min_length=1)
-    decided_by: str = "CEO"
-    task_id: str | None = None
+    choice: str = Field(min_length=1, max_length=50_000)
+    rationale: str = Field(min_length=1, max_length=50_000)
+    decided_by: str = Field(default="CEO", min_length=1, max_length=80)
+    task_id: str | None = Field(default=None, max_length=36)
+    status: DecisionStatus = DecisionStatus.ACTIVE
+    scope: DecisionScope = DecisionScope.COMPANY
+    applies_to: dict[str, str] = Field(default_factory=dict)
+    effective_at: datetime | None = None
+    expires_at: datetime | None = None
+    review_due_at: datetime | None = None
+    supersedes_decision_id: str | None = Field(default=None, max_length=36)
 
 
 class DecisionRead(ORMModel):
@@ -248,7 +261,20 @@ class DecisionRead(ORMModel):
     rationale: str
     decided_by: str
     task_id: str | None
+    status: DecisionStatus
+    scope: DecisionScope
+    applies_to: dict[str, str]
+    effective_at: datetime
+    expires_at: datetime | None
+    review_due_at: datetime | None
+    supersedes_decision_id: str | None
     created_at: datetime
+    updated_at: datetime
+
+
+class DecisionTransition(BaseModel):
+    status: DecisionStatus
+    note: str | None = Field(default=None, max_length=2_000)
 
 
 class KnowledgeCreate(BaseModel):

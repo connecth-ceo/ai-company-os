@@ -318,7 +318,12 @@ async def execute_delegation(
     result: AgentRunResult | None = None
     provider_called = False
     try:
-        company_context = await build_company_context(session, delegation.tenant_id)
+        company_context = await build_company_context(
+            session,
+            delegation.tenant_id,
+            task_id=child.id,
+            project_id=child.project_id,
+        )
         context = company_context or "No stored company context is available."
         input_text = (
             f"DELEGATED TASK:\n{child.request}\n\n"

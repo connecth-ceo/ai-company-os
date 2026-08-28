@@ -46,6 +46,21 @@ class ReviewVerdict(StrEnum):
     REWORK = "REWORK"
 
 
+class DecisionStatus(StrEnum):
+    PROPOSED = "proposed"
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+class DecisionScope(StrEnum):
+    COMPANY = "company"
+    PROJECT = "project"
+    TASK = "task"
+    DEPARTMENT = "department"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -203,9 +218,7 @@ class Delegation(Base, TimestampMixin):
     estimated_max_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
     reserved_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8), default=0)
     cost_reservation_period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
-    actual_estimated_cost_usd: Mapped[float | None] = mapped_column(
-        Numeric(14, 8), nullable=True
-    )
+    actual_estimated_cost_usd: Mapped[float | None] = mapped_column(Numeric(14, 8), nullable=True)
     policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     approval_id: Mapped[str | None] = mapped_column(
         ForeignKey("approvals.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
@@ -279,9 +292,7 @@ class AICostLedgerEntry(Base):
     input_rate_per_million_usd: Mapped[float] = mapped_column(Numeric(14, 8))
     output_rate_per_million_usd: Mapped[float] = mapped_column(Numeric(14, 8))
     estimated_cost_usd: Mapped[float] = mapped_column(Numeric(14, 8))
-    provider_billed_cost_usd: Mapped[float | None] = mapped_column(
-        Numeric(14, 8), nullable=True
-    )
+    provider_billed_cost_usd: Mapped[float | None] = mapped_column(Numeric(14, 8), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -297,6 +308,24 @@ class Memory(Base, TimestampMixin):
 
 class Decision(Base, TimestampMixin):
     __tablename__ = "decisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "supersedes_decision_id",
+            name="uq_decisions_supersedes_decision_id",
+        ),
+        CheckConstraint(
+            "supersedes_decision_id IS NULL OR supersedes_decision_id <> id",
+            name="ck_decision_not_self_supersede",
+        ),
+        CheckConstraint(
+            "status IN ('proposed', 'active', 'superseded', 'expired', 'revoked')",
+            name="ck_decision_status",
+        ),
+        CheckConstraint(
+            "scope IN ('company', 'project', 'task', 'department')",
+            name="ck_decision_scope",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
     tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
@@ -305,6 +334,25 @@ class Decision(Base, TimestampMixin):
     rationale: Mapped[str] = mapped_column(Text)
     decided_by: Mapped[str] = mapped_column(String(80), default="CEO")
     task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    status: Mapped[DecisionStatus] = mapped_column(
+        String(40), default=DecisionStatus.ACTIVE, index=True
+    )
+    scope: Mapped[DecisionScope] = mapped_column(
+        String(40), default=DecisionScope.COMPANY, index=True
+    )
+    applies_to: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    effective_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    supersedes_decision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("decisions.id", ondelete="RESTRICT"), nullable=True
+    )
+    superseded_decision: Mapped["Decision | None"] = relationship(
+        remote_side="Decision.id",
+        foreign_keys=[supersedes_decision_id],
+    )
 
 
 class KnowledgeItem(Base, TimestampMixin):

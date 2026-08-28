@@ -31,23 +31,25 @@
 - Alembic 모델/스키마 차이 검사 통과 (`No new upgrade operations detected`)
 - 비용 조회 PowerShell 파일 구문 검사 통과
 
+## 배포 확인 완료
+
+- 커밋 ae7098f를 GitHub main에 push
+- Render Web Service와 Worker가 모두 ae7098f로 Live
+- Web Service 로그에서 /ready 200 OK 확인
+
 ## 아직 외부 환경에서 확인할 항목
 
 - 현재 Codex 실행 환경에서는 Docker/WSL 서비스 접근이 거부되어 신규 마이그레이션을 실제 PostgreSQL
   컨테이너에서 다시 확인하지 못함
-- GitHub push 및 Render 자동 배포 후 Web과 Worker가 새 커밋으로 모두 `Live`인지 확인 필요
-- Render PostgreSQL의 마이그레이션 버전이 `b8c0d2e4f6a8`인지 `/ready`로 확인 필요
+- Render PostgreSQL의 정확한 마이그레이션 버전 b8c0d2e4f6a8은 /ready 응답 본문으로 별도 확인 필요
 - 실제 OpenAI 호출을 추가로 실행하지 않았으므로 새 비용 원장에 실제 운영 실행 1건을 기록하는 최종 smoke
   check가 남아 있음
 - `provider_billed_cost_usd`는 OpenAI 청구서 연동 전까지 비어 있으며 현재 값은 토큰 기반 추정치임
 
 ## 배포 후 확인 순서
 
-1. GitHub에 새 커밋을 push합니다.
-2. Render의 `ai-company-os`와 `ai-company-worker`가 같은 새 커밋으로 `Live`인지 확인합니다.
-3. `https://ai-company-os-uydy.onrender.com/ready`가 200이고 schema가 `b8c0d2e4f6a8`인지 확인합니다.
-4. Render Web Service에서 `APP_API_KEY`의 값을 복사합니다.
-5. 저장소 루트의 `CHECK_AI_COST_BUDGET.bat`을 더블클릭합니다. 이 단계는 읽기 전용이고 OpenAI 비용이
+1. Render Web Service에서 `APP_API_KEY`의 값을 복사합니다.
+2. 저장소 루트의 `CHECK_AI_COST_BUDGET.bat`을 더블클릭합니다. 이 단계는 읽기 전용이고 OpenAI 비용이
    없습니다.
-6. 월 예산·잔여액·최근 원장이 정상 출력되면 짧은 실제 위임 1건을 별도 승인 후 실행합니다.
-7. 다시 `CHECK_AI_COST_BUDGET.bat`을 실행해 실행별 추정액이 기록됐는지 확인합니다.
+3. 월 예산·잔여액·최근 원장이 정상 출력되면 짧은 실제 위임 1건을 별도 승인 후 실행합니다.
+4. 다시 `CHECK_AI_COST_BUDGET.bat`을 실행해 실행별 추정액이 기록됐는지 확인합니다.

@@ -136,6 +136,16 @@
         <textarea id="decision-choice" rows="3" required placeholder="예: 한국 시장부터 시작한다."></textarea>
         <label for="decision-rationale">결정 이유</label>
         <textarea id="decision-rationale" rows="3" required placeholder="예: 초기 고객 접근성과 검증 속도가 가장 높다."></textarea>
+        <label for="decision-lifecycle-status">기록 상태</label>
+        <select id="decision-lifecycle-status">
+          <option value="active">확정 결정</option>
+          <option value="proposed">검토 중인 제안</option>
+        </select>
+        <label for="decision-supersedes">기존 결정 대체 (선택)</label>
+        <select id="decision-supersedes">
+          <option value="">대체하지 않음</option>
+        </select>
+        <p class="panel-note">기존 결정을 대체하면 새 결정이 활성화되고 이전 결정은 이력으로 보존됩니다.</p>
         <p class="form-status" id="decision-status" aria-live="polite"></p>
         <button class="primary-button" type="submit">결정 저장</button>
       </form>
