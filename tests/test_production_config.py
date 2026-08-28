@@ -134,3 +134,30 @@ def test_attention_thresholds_are_bounded_and_ordered():
             attention_commitment_decision_hours=48,
             attention_commitment_critical_hours=24,
         )
+
+
+def test_proactive_briefing_configuration_respects_quiet_hours():
+    inactive = production_settings(briefing_enabled=True)
+    assert inactive.briefing_enabled is True
+    assert inactive.telegram_enabled is False
+
+    telegram = {
+        "telegram_enabled": True,
+        "telegram_bot_token": "token",
+        "telegram_webhook_secret": "telegram-secret-123",
+        "telegram_allowed_chat_id": "123",
+        "public_base_url": "https://company.example",
+    }
+    settings = production_settings(briefing_enabled=True, **telegram)
+    assert settings.briefing_hour == 7
+    assert settings.briefing_quiet_end_hour == 7
+
+    with pytest.raises(ValidationError, match="outside configured quiet hours"):
+        production_settings(briefing_enabled=True, briefing_hour=6, **telegram)
+    with pytest.raises(ValidationError, match="cannot cover the full day"):
+        production_settings(
+            briefing_enabled=True,
+            briefing_quiet_start_hour=7,
+            briefing_quiet_end_hour=7,
+            **telegram,
+        )

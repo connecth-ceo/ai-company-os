@@ -117,9 +117,7 @@ def price_delegation(delegation: Delegation) -> ModelPricing:
             "Delegation pricing snapshot no longer matches the approved catalog",
         )
     delegation.pricing_version = pricing.version
-    delegation.estimated_max_cost_usd = estimate_max_cost_usd(
-        pricing, delegation.token_budget
-    )
+    delegation.estimated_max_cost_usd = estimate_max_cost_usd(pricing, delegation.token_budget)
     return pricing
 
 
@@ -283,13 +281,9 @@ async def finalize_delegation_cost(
         configured_budget=_money(settings.openai_monthly_budget_usd),
     )
     if calculation_status == "uncertain_upper_bound":
-        budget.uncertain_spend_usd = _money(
-            _decimal(budget.uncertain_spend_usd) + estimated_cost
-        )
+        budget.uncertain_spend_usd = _money(_decimal(budget.uncertain_spend_usd) + estimated_cost)
     else:
-        budget.estimated_spend_usd = _money(
-            _decimal(budget.estimated_spend_usd) + estimated_cost
-        )
+        budget.estimated_spend_usd = _money(_decimal(budget.estimated_spend_usd) + estimated_cost)
     delegation.actual_estimated_cost_usd = estimated_cost
     entry = AICostLedgerEntry(
         tenant_id=delegation.tenant_id,

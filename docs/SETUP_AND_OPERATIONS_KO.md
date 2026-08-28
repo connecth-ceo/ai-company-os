@@ -185,12 +185,16 @@ Render가 코드를 가져가려면 온라인 Git 저장소가 필요하다.
 8. web service의 Environment 탭에서 자동 생성된 `APP_API_KEY`를 확인해 CEO Desk 설정에 넣는다.
 9. `PUBLIC_BASE_URL`이 실제 배포 URL인지 확인하고 Telegram webhook을 등록한다.
 10. Telegram을 실제 사용할 때만 `TELEGRAM_ENABLED=true`로 바꾼다. 그 전에는 `false`를 유지한다.
+11. `BRIEFING_ENABLED=true` 상태에서 Telegram이 활성화되면 매일 07:00 KST 자동 브리핑이 시작된다.
+    시간을 바꾸기 전에는 `docs/PROACTIVE_BRIEFING_DELIVERY_KO.md`의 quiet hours 규칙을 확인한다.
 
 Render는 `sync: false`로 선언된 secret을 최초 Blueprint 생성 중 입력받고, DB/queue 연결 주소는
 Blueprint가 자동 연결한다. `/ready`는 실제 DB 연결까지 확인하므로 배포 health check로 사용된다.
 Web 서비스의 Telegram 값을 Blueprint 생성 후 수동으로 바꾸면 worker의 `fromService` 참조가 즉시
 재주입되지 않을 수 있다. 이 경우 worker Environment에도 같은 값을 저장하고 재배포하거나, 값을 보존한
 상태에서 Blueprint를 다시 동기화한 뒤 worker의 `BOT_OK`, 허용 chat ID, 활성값을 확인한다.
+Worker는 Celery 작업 실행과 5분 주기의 브리핑 스케줄 확인을 한 프로세스에서 수행한다. 자동 브리핑은
+기존 Worker를 사용하므로 별도 Render 서비스나 추가 월정액 리소스를 만들지 않는다.
 
 ## 9. 단일 VPS에 배포
 

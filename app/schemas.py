@@ -6,6 +6,7 @@ from app.models import (
     ApprovalStatus,
     AttentionKind,
     AttentionLevel,
+    BriefingDeliveryStatus,
     CommitmentOwnerType,
     CommitmentSourceType,
     CommitmentStatus,
@@ -41,6 +42,32 @@ class AttentionQueueRead(BaseModel):
     total: int
     counts: dict[str, int]
     items: list[AttentionItemRead]
+
+
+class BriefingDeliveryRead(ORMModel):
+    id: str
+    tenant_id: str
+    briefing_date: date
+    channel: str
+    status: BriefingDeliveryStatus
+    scheduled_for: datetime
+    attempt_count: int
+    last_attempt_at: datetime | None
+    next_retry_at: datetime | None
+    sent_at: datetime | None
+    failure_code: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BriefingScheduleRead(BaseModel):
+    enabled: bool
+    timezone: str
+    daily_time: str
+    quiet_hours: str
+    catchup_hours: int
+    max_attempts: int
+    last_delivery: BriefingDeliveryRead | None
 
 
 class ProjectCreate(BaseModel):

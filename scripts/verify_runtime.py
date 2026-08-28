@@ -12,11 +12,13 @@ from app.db import EXPECTED_DB_REVISION, engine
 
 async def main(config_only: bool = False) -> None:
     settings = get_settings()
+    briefing_active = settings.briefing_enabled and settings.telegram_enabled
     print(f"Configuration: valid ({settings.app_env}, {settings.ai_provider})")
 
     if config_only:
         print("Infrastructure: skipped (--config-only)")
         print(f"Telegram: {'enabled' if settings.telegram_enabled else 'disabled'}")
+        print(f"Scheduled briefing: {'enabled' if briefing_active else 'disabled'}")
         print("Secrets: present values were validated but not displayed")
         return
 
@@ -44,6 +46,7 @@ async def main(config_only: bool = False) -> None:
         print("Redis: skipped (TASK_EXECUTION_MODE is inline)")
 
     print(f"Telegram: {'enabled' if settings.telegram_enabled else 'disabled'}")
+    print(f"Scheduled briefing: {'enabled' if briefing_active else 'disabled'}")
     print("Secrets: present values were validated but not displayed")
 
 

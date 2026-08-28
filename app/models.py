@@ -97,6 +97,14 @@ class AttentionKind(StrEnum):
     PENDING_APPROVAL = "pending_approval"
 
 
+class BriefingDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+    UNCERTAIN = "uncertain"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -437,9 +445,7 @@ class Commitment(Base, TimestampMixin):
         ForeignKey("decisions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     reminder_policy: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def is_overdue(self) -> bool:
@@ -480,6 +486,43 @@ class Approval(Base, TimestampMixin):
     decided_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
     decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BriefingDelivery(Base, TimestampMixin):
+    __tablename__ = "briefing_deliveries"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key", name="uq_briefing_deliveries_dedupe_key"),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'sent', 'failed', 'uncertain')",
+            name="ck_briefing_delivery_status",
+        ),
+        CheckConstraint(
+            "(status = 'sent' AND sent_at IS NOT NULL) OR (status <> 'sent' AND sent_at IS NULL)",
+            name="ck_briefing_delivery_sent_consistency",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    briefing_date: Mapped[date] = mapped_column(Date, index=True)
+    channel: Mapped[str] = mapped_column(String(40), default="telegram", index=True)
+    destination: Mapped[str] = mapped_column(String(120))
+    dedupe_key: Mapped[str] = mapped_column(String(240), unique=True)
+    status: Mapped[BriefingDeliveryStatus] = mapped_column(
+        String(40), default=BriefingDeliveryStatus.PENDING, index=True
+    )
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class AuditEvent(Base):

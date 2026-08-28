@@ -16,6 +16,14 @@ def test_celery_delivery_timeout_exceeds_task_hard_limit():
     assert visibility_timeout > celery_app.conf.task_time_limit
 
 
+def test_daily_briefing_tick_is_registered_without_ai_work():
+    schedule = celery_app.conf.beat_schedule["daily-briefing-delivery-tick"]
+
+    assert schedule["task"] == "ai_company.dispatch_daily_briefing"
+    assert schedule["schedule"] == 300.0
+    assert "ai_company.dispatch_daily_briefing" in celery_app.tasks
+
+
 async def test_redelivered_worker_task_recovers_interrupted_run():
     async with SessionLocal() as session:
         task = Task(

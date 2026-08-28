@@ -9,6 +9,7 @@
 - Chief of Staff, Research, Strategy, Reviewer 실행 흐름
 - 명시적 Telegram 명령으로 호출하는 Marketing 초안 및 Legal Risk Review 전문 에이전트
 - OpenAI 비용 없이 현재 업무·승인 상태를 요약하는 Telegram 데일리 브리핑
+- 매일 07:00 KST 자동 브리핑, 중복 방지, quiet hours, 실패 기록과 안전 재시도
 - PostgreSQL 기반 업무·기억·의사결정·지식·승인 영속화
 - Celery/Redis 백그라운드 작업
 - OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
@@ -91,6 +92,10 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 대표가 지금 확인할 예외를 규칙으로 계산하는 방법은
 [docs/ATTENTION_QUEUE_KO.md](docs/ATTENTION_QUEUE_KO.md), 구현·검증 상태는
 [docs/ATTENTION_QUEUE_COMPLETION_REPORT_KO.md](docs/ATTENTION_QUEUE_COMPLETION_REPORT_KO.md)에 있습니다.
+자동 브리핑의 시간·중복 방지·재시도 정책은
+[docs/PROACTIVE_BRIEFING_DELIVERY_KO.md](docs/PROACTIVE_BRIEFING_DELIVERY_KO.md), 구현·검증 상태는
+[docs/PROACTIVE_BRIEFING_DELIVERY_COMPLETION_REPORT_KO.md](docs/PROACTIVE_BRIEFING_DELIVERY_COMPLETION_REPORT_KO.md)에
+구분해 기록했습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

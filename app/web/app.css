@@ -64,7 +64,10 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .approval-actions button { flex: 1; border: 1px solid var(--forest); border-radius: 8px; padding: 9px; background: transparent; color: var(--forest); font-weight: 700; }
 .approval-actions .approve { background: var(--forest); color: white; }
 .attention-panel { margin-bottom: 18px; }
+.badge-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .rule-badge { border-radius: 999px; padding: 6px 10px; background: #eef5df; color: var(--forest); font-size: 11px; font-weight: 800; }
+.schedule-badge { border-radius: 999px; padding: 6px 10px; background: #e8f1f5; color: #24546a; font-size: 11px; font-weight: 800; }
+.schedule-badge.is-off, .schedule-badge.is-failed { background: #f8ddd4; color: #8a3821; }
 .attention-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .attention-item { border: 1px solid var(--line); border-left: 4px solid #9ea59c; border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .attention-item.level-action { border-left-color: #d7a42d; background: #fffdf6; }

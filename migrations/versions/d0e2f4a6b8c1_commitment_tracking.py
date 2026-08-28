@@ -32,9 +32,7 @@ def upgrade() -> None:
         sa.Column("project_id", sa.String(length=36), nullable=True),
         sa.Column("task_id", sa.String(length=36), nullable=True),
         sa.Column("decision_id", sa.String(length=36), nullable=True),
-        sa.Column(
-            "reminder_policy", sa.JSON(), nullable=False, server_default=sa.text("'{}'")
-        ),
+        sa.Column("reminder_policy", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

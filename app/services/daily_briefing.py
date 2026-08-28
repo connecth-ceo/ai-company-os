@@ -15,6 +15,16 @@ from app.models import (
 )
 from app.services.attention import build_attention_queue
 
+MAX_BRIEFING_CHARS = 3_800
+
+
+def limit_briefing_text(text: str) -> str:
+    if len(text) <= MAX_BRIEFING_CHARS:
+        return text
+    suffix = "\n… 전체 내용은 CEO Desk에서 확인해 주세요."
+    shortened = text[: MAX_BRIEFING_CHARS - len(suffix)].rsplit("\n", 1)[0]
+    return f"{shortened}{suffix}"
+
 
 async def build_daily_briefing(
     session: AsyncSession,
@@ -124,8 +134,6 @@ async def build_daily_briefing(
         }
         lines.extend(("", "대표 주의 큐"))
         for item in attention_queue.items:
-            lines.append(
-                f"• [{level_labels[item.level.value]}] {item.title}: {item.summary}"
-            )
+            lines.append(f"• [{level_labels[item.level.value]}] {item.title}: {item.summary}")
             lines.append(f"  ↳ {item.recommendation}")
-    return "\n".join(lines)
+    return limit_briefing_text("\n".join(lines))

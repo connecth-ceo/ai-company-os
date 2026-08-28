@@ -35,9 +35,7 @@ def upgrade() -> None:
                 server_default="0",
             )
         )
-        batch_op.add_column(
-            sa.Column("cost_reservation_period_start", sa.Date(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("cost_reservation_period_start", sa.Date(), nullable=True))
         batch_op.add_column(
             sa.Column(
                 "actual_estimated_cost_usd",
@@ -81,9 +79,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "provider", "period_start"),
     )
-    op.create_index(
-        op.f("ix_ai_monthly_budgets_tenant_id"), "ai_monthly_budgets", ["tenant_id"]
-    )
+    op.create_index(op.f("ix_ai_monthly_budgets_tenant_id"), "ai_monthly_budgets", ["tenant_id"])
     op.create_index(op.f("ix_ai_monthly_budgets_provider"), "ai_monthly_budgets", ["provider"])
     op.create_index(
         op.f("ix_ai_monthly_budgets_period_start"),
@@ -105,24 +101,16 @@ def upgrade() -> None:
         sa.Column("input_tokens", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("output_tokens", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("total_tokens", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column(
-            "input_rate_per_million_usd", sa.Numeric(precision=14, scale=8), nullable=False
-        ),
-        sa.Column(
-            "output_rate_per_million_usd", sa.Numeric(precision=14, scale=8), nullable=False
-        ),
+        sa.Column("input_rate_per_million_usd", sa.Numeric(precision=14, scale=8), nullable=False),
+        sa.Column("output_rate_per_million_usd", sa.Numeric(precision=14, scale=8), nullable=False),
         sa.Column("estimated_cost_usd", sa.Numeric(precision=14, scale=8), nullable=False),
-        sa.Column(
-            "provider_billed_cost_usd", sa.Numeric(precision=14, scale=8), nullable=True
-        ),
+        sa.Column("provider_billed_cost_usd", sa.Numeric(precision=14, scale=8), nullable=True),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("input_tokens >= 0", name="ck_ai_cost_input_tokens_nonnegative"),
         sa.CheckConstraint("output_tokens >= 0", name="ck_ai_cost_output_tokens_nonnegative"),
         sa.CheckConstraint("total_tokens >= 0", name="ck_ai_cost_total_tokens_nonnegative"),
         sa.CheckConstraint("estimated_cost_usd >= 0", name="ck_ai_cost_estimate_nonnegative"),
-        sa.ForeignKeyConstraint(
-            ["delegation_id"], ["delegations.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["delegation_id"], ["delegations.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["task_run_id"], ["task_runs.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("delegation_id"),

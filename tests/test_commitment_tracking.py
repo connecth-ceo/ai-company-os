@@ -36,9 +36,7 @@ def test_commitment_defaults_detail_and_audit(client):
 def test_commitments_are_tenant_isolated(client):
     owner = {"X-Tenant-ID": "owner"}
     other = {"X-Tenant-ID": "other"}
-    item = client.post(
-        "/api/v1/commitments", json=commitment_payload(), headers=owner
-    ).json()
+    item = client.post("/api/v1/commitments", json=commitment_payload(), headers=owner).json()
 
     assert client.get(f"/api/v1/commitments/{item['id']}", headers=other).status_code == 404
     assert client.get("/api/v1/commitments", headers=other).json() == []
@@ -224,9 +222,7 @@ def test_commitment_filters_by_owner_status_and_links(client):
 
     by_owner = client.get("/api/v1/commitments?owner_id=CEO").json()
     by_status = client.get("/api/v1/commitments?status=in_progress").json()
-    by_decision = client.get(
-        f"/api/v1/commitments?decision_id={decision['id']}"
-    ).json()
+    by_decision = client.get(f"/api/v1/commitments?decision_id={decision['id']}").json()
 
     assert [item["id"] for item in by_owner] == [first["id"]]
     assert [item["id"] for item in by_status] == [second["id"]]
@@ -234,9 +230,7 @@ def test_commitment_filters_by_owner_status_and_links(client):
 
 
 def test_commitment_initial_and_metadata_inputs_are_bounded(client):
-    completed = client.post(
-        "/api/v1/commitments", json=commitment_payload(status="completed")
-    )
+    completed = client.post("/api/v1/commitments", json=commitment_payload(status="completed"))
     too_many = client.post(
         "/api/v1/commitments",
         json=commitment_payload(provenance={f"key-{i}": "value" for i in range(21)}),

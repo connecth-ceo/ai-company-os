@@ -110,9 +110,7 @@ def test_execution_writes_immutable_estimate_and_monthly_summary(client):
     assert summary["estimated_spend_usd"] == 0.000678
     assert summary["uncertain_spend_usd"] == 0
     assert summary["pricing_is_estimate"] is True
-    assert client.get(
-        "/api/v1/ai-costs/ledger", headers={"X-Tenant-ID": "other"}
-    ).json() == []
+    assert client.get("/api/v1/ai-costs/ledger", headers={"X-Tenant-ID": "other"}).json() == []
     other_summary = client.get(
         "/api/v1/ai-costs/current-month", headers={"X-Tenant-ID": "other"}
     ).json()

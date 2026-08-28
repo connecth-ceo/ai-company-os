@@ -7,6 +7,7 @@ const state = {
   decisions: [],
   commitments: [],
   attention: { total: 0, counts: {}, items: [] },
+  briefingSchedule: { enabled: false, last_delivery: null },
   knowledge: [],
 };
 
@@ -127,6 +128,25 @@ function renderAttention() {
   `).join("");
 }
 
+function renderBriefingSchedule() {
+  const schedule = state.briefingSchedule;
+  const badge = $("#briefing-schedule-badge");
+  badge.classList.remove("is-off", "is-failed");
+  if (!schedule.enabled) {
+    badge.textContent = "자동 브리핑 꺼짐";
+    badge.classList.add("is-off");
+    return;
+  }
+  const last = schedule.last_delivery;
+  if (["failed", "uncertain"].includes(last?.status)) {
+    badge.textContent = `자동 브리핑 재시도 대기 · ${schedule.daily_time}`;
+    badge.classList.add("is-failed");
+    return;
+  }
+  badge.textContent = `자동 브리핑 매일 ${schedule.daily_time} KST`;
+  badge.title = `조용한 시간 ${schedule.quiet_hours} · 최대 ${schedule.max_attempts}회 시도`;
+}
+
 function renderCommitments() {
   const items = state.commitments.filter((item) => !["completed", "cancelled"].includes(item.status));
   if (!items.length) {
@@ -176,10 +196,11 @@ function renderCompanyContext() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, attention, knowledge] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
+      api("/api/v1/briefing-schedule"),
       api("/api/v1/knowledge"),
     ]);
     state.tasks = await Promise.all(tasks.map((task) => api(`/api/v1/tasks/${task.id}`)));
@@ -188,8 +209,9 @@ async function loadDashboard() {
     state.decisions = decisions;
     state.commitments = commitments;
     state.attention = attention;
+    state.briefingSchedule = briefingSchedule;
     state.knowledge = knowledge;
-    renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderCommitments(); renderCompanyContext();
+    renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';

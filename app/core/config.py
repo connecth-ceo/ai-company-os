@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = Field(default=None, repr=False)
     telegram_webhook_secret: str | None = Field(default=None, repr=False)
     telegram_allowed_chat_id: str | None = None
+    briefing_enabled: bool = False
+    briefing_timezone: Literal["Asia/Seoul"] = "Asia/Seoul"
+    briefing_hour: int = Field(default=7, ge=0, le=23)
+    briefing_minute: int = Field(default=0, ge=0, le=59)
+    briefing_catchup_hours: int = Field(default=3, ge=1, le=12)
+    briefing_quiet_start_hour: int = Field(default=22, ge=0, le=23)
+    briefing_quiet_end_hour: int = Field(default=7, ge=0, le=23)
+    briefing_max_attempts: int = Field(default=3, ge=1, le=10)
+    briefing_retry_seconds: int = Field(default=300, ge=60, le=3_600)
+    briefing_delivery_lease_seconds: int = Field(default=600, ge=60, le=3_600)
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -67,10 +77,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> "Settings":
-        if (
-            self.attention_commitment_critical_hours
-            <= self.attention_commitment_decision_hours
-        ):
+        if self.attention_commitment_critical_hours <= self.attention_commitment_decision_hours:
             raise ValueError(
                 "ATTENTION_COMMITMENT_CRITICAL_HOURS must exceed "
                 "ATTENTION_COMMITMENT_DECISION_HOURS"
@@ -106,6 +113,16 @@ class Settings(BaseSettings):
                 )
             if not re.fullmatch(r"-?[0-9]+", self.telegram_allowed_chat_id or ""):
                 raise ValueError("TELEGRAM_ALLOWED_CHAT_ID must be a numeric chat ID")
+        if self.briefing_quiet_start_hour == self.briefing_quiet_end_hour:
+            raise ValueError("Briefing quiet hours cannot cover the full day")
+        scheduled_in_quiet_hours = (
+            self.briefing_quiet_start_hour <= self.briefing_hour < self.briefing_quiet_end_hour
+            if self.briefing_quiet_start_hour < self.briefing_quiet_end_hour
+            else self.briefing_hour >= self.briefing_quiet_start_hour
+            or self.briefing_hour < self.briefing_quiet_end_hour
+        )
+        if scheduled_in_quiet_hours:
+            raise ValueError("BRIEFING_HOUR must be outside configured quiet hours")
         if self.app_env == "production":
             if not self.auth_enabled:
                 raise ValueError("AUTH_ENABLED must be true in production")

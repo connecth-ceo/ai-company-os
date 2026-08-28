@@ -58,6 +58,26 @@ services:
         sync: false
       - key: TELEGRAM_ALLOWED_CHAT_ID
         sync: false
+      - key: BRIEFING_ENABLED
+        value: "true"
+      - key: BRIEFING_TIMEZONE
+        value: Asia/Seoul
+      - key: BRIEFING_HOUR
+        value: "7"
+      - key: BRIEFING_MINUTE
+        value: "0"
+      - key: BRIEFING_CATCHUP_HOURS
+        value: "3"
+      - key: BRIEFING_QUIET_START_HOUR
+        value: "22"
+      - key: BRIEFING_QUIET_END_HOUR
+        value: "7"
+      - key: BRIEFING_MAX_ATTEMPTS
+        value: "3"
+      - key: BRIEFING_RETRY_SECONDS
+        value: "300"
+      - key: BRIEFING_DELIVERY_LEASE_SECONDS
+        value: "600"
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: PUBLIC_BASE_URL
@@ -79,7 +99,7 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=2
+    dockerCommand: celery -A app.worker.celery_app worker --beat --schedule=/tmp/celerybeat-schedule --loglevel=INFO --concurrency=2
     autoDeployTrigger: checksPass
     maxShutdownDelaySeconds: 120
     envVars:
@@ -169,6 +189,56 @@ services:
           type: web
           name: ai-company-os
           envVarKey: TELEGRAM_ALLOWED_CHAT_ID
+      - key: BRIEFING_ENABLED
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_ENABLED
+      - key: BRIEFING_TIMEZONE
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_TIMEZONE
+      - key: BRIEFING_HOUR
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_HOUR
+      - key: BRIEFING_MINUTE
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_MINUTE
+      - key: BRIEFING_CATCHUP_HOURS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_CATCHUP_HOURS
+      - key: BRIEFING_QUIET_START_HOUR
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_QUIET_START_HOUR
+      - key: BRIEFING_QUIET_END_HOUR
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_QUIET_END_HOUR
+      - key: BRIEFING_MAX_ATTEMPTS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_MAX_ATTEMPTS
+      - key: BRIEFING_RETRY_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_RETRY_SECONDS
+      - key: BRIEFING_DELIVERY_LEASE_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: BRIEFING_DELIVERY_LEASE_SECONDS
       - key: TELEGRAM_WEBHOOK_SECRET
         fromService:
           type: web

@@ -3,6 +3,7 @@ import asyncio
 from celery import Celery
 
 from app.core.config import get_settings
+from app.services.briefing_delivery import dispatch_scheduled_briefing
 from app.services.delegation_execution import (
     DelegationExecutionError,
     execute_delegation_with_new_session,
@@ -24,6 +25,14 @@ celery_app.conf.update(
     result_expires=86400,
     task_soft_time_limit=settings.task_timeout_seconds + 30,
     task_time_limit=settings.task_timeout_seconds + 60,
+    timezone=settings.briefing_timezone,
+    enable_utc=True,
+    beat_schedule={
+        "daily-briefing-delivery-tick": {
+            "task": "ai_company.dispatch_daily_briefing",
+            "schedule": 300.0,
+        }
+    },
 )
 
 
@@ -49,3 +58,13 @@ def execute_delegation_job(self, delegation_id: str) -> None:
         asyncio.run(execute_delegation_with_new_session(delegation_id, True))
     except DelegationExecutionError:
         raise
+
+
+@celery_app.task(name="ai_company.dispatch_daily_briefing", max_retries=0)
+def dispatch_daily_briefing_job() -> dict[str, str | int | None]:
+    result = asyncio.run(dispatch_scheduled_briefing(settings=settings))
+    return {
+        "outcome": result.outcome.value,
+        "delivery_id": result.delivery_id,
+        "attempt_count": result.attempt_count,
+    }

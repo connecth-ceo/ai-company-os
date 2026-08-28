@@ -37,7 +37,7 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-    command: celery -A app.worker.celery_app worker --loglevel=INFO --concurrency=${CELERY_CONCURRENCY:-2}
+    command: celery -A app.worker.celery_app worker --beat --schedule=/tmp/celerybeat-schedule --loglevel=INFO --concurrency=${CELERY_CONCURRENCY:-2}
     stop_grace_period: 2m
 
   migrate:

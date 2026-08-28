@@ -77,9 +77,7 @@ async def _require_links(
             )
         )
         if decision is None:
-            raise CommitmentLifecycleRejected(
-                "decision_not_found", "Related decision not found"
-            )
+            raise CommitmentLifecycleRejected("decision_not_found", "Related decision not found")
     return project, task, decision
 
 

@@ -60,9 +60,7 @@ async def build_attention_queue(
         await session.scalars(
             select(Commitment).where(
                 Commitment.tenant_id == tenant_id,
-                Commitment.status.in_(
-                    [CommitmentStatus.OPEN, CommitmentStatus.IN_PROGRESS]
-                ),
+                Commitment.status.in_([CommitmentStatus.OPEN, CommitmentStatus.IN_PROGRESS]),
                 Commitment.due_at < current,
             )
         )
@@ -125,8 +123,7 @@ async def build_attention_queue(
                 title="오래 실행 중인 업무",
                 summary=task.title,
                 recommendation=(
-                    "작업자 로그와 실행 상태를 확인하고, 중복 실행 전에 복구 여부를 "
-                    "결정해 주세요."
+                    "작업자 로그와 실행 상태를 확인하고, 중복 실행 전에 복구 여부를 결정해 주세요."
                 ),
                 resource_type="task",
                 resource_id=task.id,
@@ -253,8 +250,7 @@ async def build_attention_queue(
         )
     )
     counts = {
-        level.value: sum(1 for item in selected if item.level == level)
-        for level in AttentionLevel
+        level.value: sum(1 for item in selected if item.level == level) for level in AttentionLevel
     }
     return AttentionQueueRead(
         rule_version=RULE_VERSION,

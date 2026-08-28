@@ -115,19 +115,13 @@ def test_long_running_and_failed_tasks_are_classified_without_execution(client):
             ).json()["id"]
         )
     asyncio.run(
-        configure_task_state(
-            task_ids[0], status=TaskStatus.RUNNING, age=timedelta(minutes=5)
-        )
+        configure_task_state(task_ids[0], status=TaskStatus.RUNNING, age=timedelta(minutes=5))
     )
     asyncio.run(
-        configure_task_state(
-            task_ids[1], status=TaskStatus.RUNNING, age=timedelta(minutes=30)
-        )
+        configure_task_state(task_ids[1], status=TaskStatus.RUNNING, age=timedelta(minutes=30))
     )
     asyncio.run(
-        configure_task_state(
-            task_ids[2], status=TaskStatus.RUNNING, age=timedelta(minutes=60)
-        )
+        configure_task_state(task_ids[2], status=TaskStatus.RUNNING, age=timedelta(minutes=60))
     )
     for index, failures in enumerate((1, 2, 3), start=3):
         asyncio.run(
@@ -182,9 +176,7 @@ def test_attention_filters_and_limit_are_applied_after_priority_sort(client):
             json=commitment_payload(f"Item {index}", now - timedelta(hours=hours)),
         )
 
-    response = client.get(
-        "/api/v1/attention?min_level=decision&kind=overdue_commitment&limit=1"
-    )
+    response = client.get("/api/v1/attention?min_level=decision&kind=overdue_commitment&limit=1")
 
     assert response.status_code == 200
     body = response.json()

@@ -15,6 +15,8 @@ from app.models import (
     AttentionKind,
     AttentionLevel,
     AuditEvent,
+    BriefingDelivery,
+    BriefingDeliveryStatus,
     Commitment,
     CommitmentStatus,
     Decision,
@@ -37,6 +39,8 @@ from app.schemas import (
     ApprovalRead,
     AttentionQueueRead,
     AuditEventRead,
+    BriefingDeliveryRead,
+    BriefingScheduleRead,
     CommitmentCreate,
     CommitmentRead,
     CommitmentTransition,
@@ -99,6 +103,52 @@ async def get_attention_queue(
         minimum_level=minimum_level,
         kind=kind,
         limit=limit,
+    )
+
+
+@router.get("/briefing-deliveries", response_model=list[BriefingDeliveryRead])
+async def list_briefing_deliveries(
+    status: BriefingDeliveryStatus | None = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[BriefingDelivery]:
+    conditions = [BriefingDelivery.tenant_id == context.tenant_id]
+    if status is not None:
+        conditions.append(BriefingDelivery.status == status)
+    query = (
+        select(BriefingDelivery)
+        .where(*conditions)
+        .order_by(BriefingDelivery.scheduled_for.desc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/briefing-schedule", response_model=BriefingScheduleRead)
+async def get_briefing_schedule(
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> BriefingScheduleRead:
+    last_delivery = (
+        await session.scalars(
+            select(BriefingDelivery)
+            .where(BriefingDelivery.tenant_id == context.tenant_id)
+            .order_by(BriefingDelivery.scheduled_for.desc())
+            .limit(1)
+        )
+    ).first()
+    return BriefingScheduleRead(
+        enabled=settings.briefing_enabled and settings.telegram_enabled,
+        timezone=settings.briefing_timezone,
+        daily_time=f"{settings.briefing_hour:02d}:{settings.briefing_minute:02d}",
+        quiet_hours=(
+            f"{settings.briefing_quiet_start_hour:02d}:00-{settings.briefing_quiet_end_hour:02d}:00"
+        ),
+        catchup_hours=settings.briefing_catchup_hours,
+        max_attempts=settings.briefing_max_attempts,
+        last_delivery=last_delivery,
     )
 
 
@@ -771,9 +821,7 @@ async def list_commitments(
     if overdue_only:
         conditions.extend(
             [
-                Commitment.status.in_(
-                    [CommitmentStatus.OPEN, CommitmentStatus.IN_PROGRESS]
-                ),
+                Commitment.status.in_([CommitmentStatus.OPEN, CommitmentStatus.IN_PROGRESS]),
                 Commitment.due_at < datetime.now(UTC),
             ]
         )
