@@ -199,6 +199,9 @@ class Delegation(Base, TimestampMixin):
     timeout_seconds: Mapped[int] = mapped_column(Integer)
     cost_budget_usd: Mapped[float] = mapped_column(Numeric(10, 4))
     policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    approval_id: Mapped[str | None] = mapped_column(
+        ForeignKey("approvals.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
+    )
     task_run_id: Mapped[str | None] = mapped_column(
         ForeignKey("task_runs.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
     )

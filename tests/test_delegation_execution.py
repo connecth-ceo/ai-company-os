@@ -8,7 +8,7 @@ from app.models import Delegation
 from app.services.delegation_execution import dispatch_delegation, execute_delegation
 
 
-def _create_delegation(client, *, role="research"):
+def _create_delegation(client, *, role="research", cost_budget_usd=0.5):
     parent = client.post(
         "/api/v1/tasks",
         json={"title": "Parent", "request": "대표 업무"},
@@ -22,7 +22,7 @@ def _create_delegation(client, *, role="research"):
             "reason": "역할 기반 검증",
             "token_budget": 2_000,
             "timeout_seconds": 60,
-            "cost_budget_usd": 0.5,
+            "cost_budget_usd": cost_budget_usd,
         },
     )
     assert response.status_code == 201
@@ -76,6 +76,62 @@ def test_delegation_execution_is_single_dispatch_and_tenant_isolated(client):
     assert second.status_code == 409
     child = client.get(f"/api/v1/tasks/{delegation['child_task_id']}").json()
     assert len(child["runs"]) == 1
+
+
+def test_sensitive_delegation_requires_explicit_ceo_approval_before_dispatch(client):
+    _, delegation = _create_delegation(client, role="legal_review")
+
+    assert delegation["approval_id"]
+    assert delegation["policy_snapshot"]["approval_gate"] == {
+        "required": True,
+        "reasons": ["sensitive_role"],
+        "cost_threshold_usd": 1.0,
+    }
+    approval = next(
+        item
+        for item in client.get("/api/v1/approvals").json()
+        if item["id"] == delegation["approval_id"]
+    )
+    assert approval["status"] == "pending"
+    assert approval["task_id"] == delegation["child_task_id"]
+
+    blocked = client.post(f"/api/v1/delegations/{delegation['id']}/run")
+    assert blocked.status_code == 409
+    assert "explicit CEO approval" in blocked.json()["detail"]
+
+    decided = client.post(
+        f"/api/v1/approvals/{approval['id']}/decide",
+        json={"approved": True, "decided_by": "CEO", "note": "검증 승인"},
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    dispatched = client.post(f"/api/v1/delegations/{delegation['id']}/run")
+    assert dispatched.status_code == 202
+    detail = client.get(f"/api/v1/delegations/{delegation['id']}").json()
+    assert detail["status"] == "completed"
+    assert detail["task_run_id"]
+
+    actions = {event["action"] for event in client.get("/api/v1/audit-events").json()}
+    assert "approval.requested" in actions
+    assert "delegation.approval_approved" in actions
+
+
+def test_rejected_or_high_cost_delegation_fails_closed(client):
+    _, delegation = _create_delegation(client, cost_budget_usd=1.5)
+    assert delegation["policy_snapshot"]["approval_gate"]["reasons"] == ["cost_budget"]
+
+    decision = client.post(
+        f"/api/v1/approvals/{delegation['approval_id']}/decide",
+        json={"approved": False, "decided_by": "CEO"},
+    )
+    assert decision.status_code == 200
+    blocked = client.post(f"/api/v1/delegations/{delegation['id']}/run")
+    assert blocked.status_code == 409
+    assert "rejected" in blocked.json()["detail"]
+    detail = client.get(f"/api/v1/delegations/{delegation['id']}").json()
+    assert detail["status"] == "created"
+    assert detail["task_run_id"] is None
 
 
 def test_policy_drift_fails_closed_before_runtime(client):

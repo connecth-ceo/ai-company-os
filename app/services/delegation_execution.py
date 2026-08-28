@@ -14,6 +14,7 @@ from app.db import SessionLocal
 from app.models import Approval, ApprovalStatus, Delegation, Task, TaskRun, TaskStatus
 from app.services.audit import add_audit_event
 from app.services.company_context import build_company_context
+from app.services.delegation import delegation_approval_gate
 
 
 class DelegationExecutionRejected(ValueError):
@@ -106,7 +107,7 @@ async def validate_delegation_execution(
     )
     if pending:
         raise DelegationExecutionRejected(
-            "approval_pending", "Delegation execution is paused while approval is pending"
+            "approval_pending", "Delegation execution awaits explicit CEO approval"
         )
 
     try:
@@ -119,6 +120,44 @@ async def validate_delegation_execution(
     if any(delegation.policy_snapshot.get(key) != value for key, value in expected.items()):
         raise DelegationExecutionRejected(
             "policy_drift", "Delegation policy differs from the current registered role"
+        )
+    expected_gate = delegation_approval_gate(
+        delegated_role=definition.key,
+        cost_budget_usd=float(delegation.cost_budget_usd),
+        settings=settings,
+    )
+    if delegation.policy_snapshot.get("approval_gate") != expected_gate:
+        raise DelegationExecutionRejected(
+            "approval_policy_drift",
+            "Delegation approval gate differs from the current configured policy",
+        )
+    if expected_gate["required"]:
+        if delegation.approval_id is None:
+            raise DelegationExecutionRejected(
+                "approval_missing", "Required CEO approval is not linked to the delegation"
+            )
+        approval = await session.scalar(
+            select(Approval).where(
+                Approval.id == delegation.approval_id,
+                Approval.tenant_id == delegation.tenant_id,
+                Approval.task_id == child.id,
+            )
+        )
+        if approval is None:
+            raise DelegationExecutionRejected(
+                "approval_missing", "Required CEO approval record is unavailable"
+            )
+        if approval.status == ApprovalStatus.PENDING:
+            raise DelegationExecutionRejected(
+                "approval_pending", "Delegation execution awaits explicit CEO approval"
+            )
+        if approval.status != ApprovalStatus.APPROVED:
+            raise DelegationExecutionRejected(
+                "approval_rejected", "CEO rejected this delegated execution"
+            )
+    elif delegation.approval_id is not None:
+        raise DelegationExecutionRejected(
+            "approval_link_unexpected", "Delegation has an unexpected approval link"
         )
     if not set(definition.allowed_tools) <= SAFE_TOOLS:
         raise DelegationExecutionRejected("tool_denied", "Delegated role requests a denied tool")

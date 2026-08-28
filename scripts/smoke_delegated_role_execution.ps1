@@ -27,14 +27,14 @@ $headers = @{
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
 try {
-    Write-Host "1/5 Creating a parent task..."
+    Write-Host "1/7 Creating a parent task..."
     $parentBody = @{
         title = "[PAID SMOKE] Delegated execution parent $timestamp"
         request = "Verify one mediated delegated role execution."
     } | ConvertTo-Json
     $parent = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/tasks" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $parentBody
 
-    Write-Host "2/5 Creating a Legal Review delegation..."
+    Write-Host "2/7 Creating a Legal Review delegation..."
     $delegationBody = @{
         title = "[PAID SMOKE] Short legal review"
         request = "다음 문구의 일반적인 법률 위험 두 가지를 200자 이내의 예비 검토 초안으로 작성해줘: '고객 데이터는 서비스 개선에 자유롭게 활용할 수 있습니다.' 외부 행동은 하지 마."
@@ -47,10 +47,33 @@ try {
     } | ConvertTo-Json
     $delegation = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/tasks/$($parent.id)/delegations" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $delegationBody
 
-    Write-Host "3/5 Dispatching exactly one delegated role run..."
+    if (-not $delegation.approval_id) {
+        throw "The Legal Review delegation did not create a required CEO approval."
+    }
+    Write-Host "3/7 Verifying the CEO approval gate..."
+    $blocked = $false
+    try {
+        Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/delegations/$($delegation.id)/run" -Headers $headers
+    }
+    catch {
+        if ($_.Exception.Response.StatusCode.value__ -eq 409) { $blocked = $true } else { throw }
+    }
+    if (-not $blocked) { throw "Delegation was not blocked before CEO approval." }
+
+    Write-Host "4/7 CEO approval is required before this paid call."
+    $confirmation = Read-Host "Type APPROVE to approve exactly one delegated OpenAI run"
+    if ($confirmation -cne "APPROVE") { throw "CEO approval was not entered." }
+    $decisionBody = @{
+        approved = $true
+        decided_by = "CEO"
+        note = "One explicitly approved paid smoke test"
+    } | ConvertTo-Json
+    Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/approvals/$($delegation.approval_id)/decide" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $decisionBody | Out-Null
+
+    Write-Host "5/7 Dispatching exactly one delegated role run..."
     $dispatch = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/delegations/$($delegation.id)/run" -Headers $headers
 
-    Write-Host "4/5 Waiting for the worker..."
+    Write-Host "6/7 Waiting for the worker..."
     $detail = $null
     for ($attempt = 0; $attempt -lt 36; $attempt++) {
         Start-Sleep -Seconds 5
@@ -62,7 +85,7 @@ try {
         throw "Delegated execution did not complete: status=$($detail.status), error=$($detail.error)"
     }
 
-    Write-Host "5/5 Verifying the TaskRun ledger..."
+    Write-Host "7/7 Verifying the TaskRun ledger..."
     $child = Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/v1/tasks/$($delegation.child_task_id)" -Headers $headers
     if ($child.status -ne "completed" -or $child.runs.Count -ne 1) {
         throw "The child Task/TaskRun completion record is invalid."

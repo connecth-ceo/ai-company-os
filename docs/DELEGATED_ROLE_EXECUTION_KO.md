@@ -9,8 +9,14 @@
 ## API 순서
 
 1. `POST /api/v1/tasks/{parent_task_id}/delegations`로 위임과 하위 업무를 생성한다.
-2. 응답의 `id`를 사용해 `POST /api/v1/delegations/{delegation_id}/run`을 호출한다.
-3. `GET /api/v1/delegations/{delegation_id}`로 상태와 사용량을 조회한다.
+2. 응답에 `approval_id`가 있으면 `GET /api/v1/approvals`에서 승인 요청을 확인한다.
+3. CEO가 `POST /api/v1/approvals/{approval_id}/decide`로 승인 또는 거절한다.
+4. 승인된 경우에만 `POST /api/v1/delegations/{delegation_id}/run`을 호출한다.
+5. `GET /api/v1/delegations/{delegation_id}`로 상태와 사용량을 조회한다.
+
+기본 정책은 `legal_review` 역할과 `DELEGATION_APPROVAL_COST_THRESHOLD_USD`를 초과하는 비용 상한에
+CEO 승인을 요구한다. 역할 목록은 `DELEGATION_APPROVAL_ROLES`로 설정한다. 승인 대기·거절·누락·정책
+변경 상태에서는 fail-closed로 실행하지 않는다.
 4. `GET /api/v1/tasks/{child_task_id}`로 결과와 TaskRun을 조회한다.
 
 운영 환경에서는 모든 요청에 `X-API-Key`와 `X-Tenant-ID`를 보낸다. 위임 하위 업무를 일반

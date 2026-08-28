@@ -229,8 +229,24 @@ async def delegate_task(
             "reason": payload.reason,
             "delegated_role": payload.delegated_role,
             "depth": delegation.depth,
+            "approval_id": delegation.approval_id,
         },
     )
+    if delegation.approval_id:
+        approval = await session.get(Approval, delegation.approval_id)
+        add_audit_event(
+            session,
+            tenant_id=context.tenant_id,
+            actor="system",
+            action="approval.requested",
+            resource_type="approval",
+            resource_id=delegation.approval_id,
+            details={
+                "task_id": child.id,
+                "risk": approval.risk if approval else "high",
+                "delegation_id": delegation.id,
+            },
+        )
     await session.commit()
     await session.refresh(delegation)
     return delegation
@@ -611,6 +627,12 @@ async def decide_approval(
     item.decided_by = payload.decided_by
     item.decision_note = payload.note
     item.decided_at = datetime.now(UTC)
+    linked_delegation = await session.scalar(
+        select(Delegation).where(
+            Delegation.approval_id == item.id,
+            Delegation.tenant_id == context.tenant_id,
+        )
+    )
     add_audit_event(
         session,
         tenant_id=context.tenant_id,
@@ -618,7 +640,18 @@ async def decide_approval(
         action=f"approval.{item.status.value}",
         resource_type="approval",
         resource_id=item.id,
+        details={"delegation_id": linked_delegation.id if linked_delegation else None},
     )
+    if linked_delegation:
+        add_audit_event(
+            session,
+            tenant_id=context.tenant_id,
+            actor=payload.decided_by,
+            action=f"delegation.approval_{item.status.value}",
+            resource_type="delegation",
+            resource_id=linked_delegation.id,
+            details={"approval_id": item.id, "child_task_id": linked_delegation.child_task_id},
+        )
     await session.commit()
     await session.refresh(item)
     return item

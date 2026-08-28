@@ -19,6 +19,21 @@ class DelegationRejected(ValueError):
         return self.detail
 
 
+def delegation_approval_gate(
+    *, delegated_role: str, cost_budget_usd: float, settings: Settings
+) -> dict[str, object]:
+    reasons: list[str] = []
+    if delegated_role in settings.delegation_approval_role_set:
+        reasons.append("sensitive_role")
+    if cost_budget_usd > settings.delegation_approval_cost_threshold_usd:
+        reasons.append("cost_budget")
+    return {
+        "required": bool(reasons),
+        "reasons": reasons,
+        "cost_threshold_usd": settings.delegation_approval_cost_threshold_usd,
+    }
+
+
 async def _delegation_depth(session: AsyncSession, parent: Task) -> int:
     current = parent
     visited: set[str] = set()
@@ -115,8 +130,13 @@ async def create_delegation(
                 "budget_limit", f"{name} exceeds the configured delegation maximum"
             )
 
+    approval_gate = delegation_approval_gate(
+        delegated_role=definition.key,
+        cost_budget_usd=payload.cost_budget_usd,
+        settings=settings,
+    )
     policy_snapshot = {
-        "version": "1.0.0",
+        "version": "1.1.0",
         "max_depth": settings.delegation_max_depth,
         "max_children": settings.delegation_max_children,
         "depth": depth,
@@ -127,6 +147,7 @@ async def create_delegation(
         "allowed_tools": list(definition.allowed_tools),
         "permissions": list(definition.permissions),
         "approval_policy": definition.approval_policy,
+        "approval_gate": approval_gate,
         "budget": {
             "token_budget": payload.token_budget,
             "timeout_seconds": payload.timeout_seconds,
@@ -144,6 +165,26 @@ async def create_delegation(
     )
     session.add(child)
     await session.flush()
+    approval = None
+    if approval_gate["required"]:
+        risk = (
+            "critical"
+            if payload.cost_budget_usd > settings.delegation_approval_cost_threshold_usd
+            else "high"
+        )
+        approval = Approval(
+            tenant_id=parent.tenant_id,
+            task_id=child.id,
+            action=f"Execute delegated role: {definition.role}",
+            reason=(
+                "CEO approval is required before delegated execution "
+                f"(role={definition.key}, reasons={','.join(approval_gate['reasons'])}, "
+                f"cost_budget_usd={payload.cost_budget_usd:.4f})."
+            ),
+            risk=risk,
+        )
+        session.add(approval)
+        await session.flush()
     delegation = Delegation(
         tenant_id=parent.tenant_id,
         project_id=parent.project_id,
@@ -157,6 +198,7 @@ async def create_delegation(
         timeout_seconds=payload.timeout_seconds,
         cost_budget_usd=payload.cost_budget_usd,
         policy_snapshot=policy_snapshot,
+        approval_id=approval.id if approval else None,
     )
     session.add(delegation)
     await session.flush()

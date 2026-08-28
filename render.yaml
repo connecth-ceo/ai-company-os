@@ -32,6 +32,10 @@ services:
         value: "false"
       - key: OPENAI_STORE_RESPONSES
         value: "false"
+      - key: DELEGATION_APPROVAL_COST_THRESHOLD_USD
+        value: "1.0"
+      - key: DELEGATION_APPROVAL_ROLES
+        value: legal_review
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -86,6 +90,16 @@ services:
         value: "false"
       - key: OPENAI_STORE_RESPONSES
         value: "false"
+      - key: DELEGATION_APPROVAL_COST_THRESHOLD_USD
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: DELEGATION_APPROVAL_COST_THRESHOLD_USD
+      - key: DELEGATION_APPROVAL_ROLES
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: DELEGATION_APPROVAL_ROLES
       - key: OPENAI_API_KEY
         fromService:
           type: web

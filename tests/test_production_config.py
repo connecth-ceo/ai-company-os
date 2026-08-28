@@ -87,3 +87,19 @@ def test_enabled_telegram_requires_complete_valid_https_configuration():
         public_base_url="https://company.example",
     )
     assert settings.telegram_enabled is True
+
+
+def test_delegation_approval_policy_configuration_is_validated():
+    settings = production_settings(
+        delegation_approval_cost_threshold_usd=0.75,
+        delegation_approval_roles="legal_review,marketing",
+    )
+    assert settings.delegation_approval_role_set == {"legal_review", "marketing"}
+
+    with pytest.raises(ValidationError, match="cannot exceed"):
+        production_settings(
+            delegation_max_cost_usd=5,
+            delegation_approval_cost_threshold_usd=6,
+        )
+    with pytest.raises(ValidationError, match="comma-separated"):
+        production_settings(delegation_approval_roles="legal-review")

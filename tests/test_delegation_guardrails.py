@@ -40,6 +40,8 @@ def test_mediated_delegation_inherits_boundaries_and_stays_queued(client):
     assert record["parent_task_id"] == parent["id"]
     assert record["depth"] == 1
     assert record["status"] == "created"
+    assert record["approval_id"] is None
+    assert record["policy_snapshot"]["approval_gate"]["required"] is False
     assert record["policy_snapshot"]["allowed_tools"] == ["web_search"]
     assert record["policy_snapshot"]["approval_policy"] == "none"
 
@@ -54,6 +56,7 @@ def test_mediated_delegation_inherits_boundaries_and_stays_queued(client):
     delegated = next(event for event in events if event["action"] == "task.delegated")
     assert delegated["details"]["initiator"] == "CEO"
     assert delegated["details"]["reason"] == "전문 역할에 제한적으로 위임"
+    assert delegated["details"]["approval_id"] is None
 
 
 def test_delegation_enforces_depth_and_child_limits(client):

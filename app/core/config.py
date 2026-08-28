@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     delegation_max_token_budget: int = Field(default=50_000, ge=1, le=1_000_000)
     delegation_max_timeout_seconds: int = Field(default=900, ge=30, le=3600)
     delegation_max_cost_usd: float = Field(default=5.0, gt=0, le=1_000)
+    delegation_approval_cost_threshold_usd: float = Field(default=1.0, gt=0, le=1_000)
+    delegation_approval_roles: str = "legal_review"
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"
@@ -52,8 +54,20 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @property
+    def delegation_approval_role_set(self) -> set[str]:
+        return {role.strip() for role in self.delegation_approval_roles.split(",") if role.strip()}
+
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> "Settings":
+        if self.delegation_approval_cost_threshold_usd > self.delegation_max_cost_usd:
+            raise ValueError(
+                "DELEGATION_APPROVAL_COST_THRESHOLD_USD cannot exceed DELEGATION_MAX_COST_USD"
+            )
+        if any(
+            not re.fullmatch(r"[a-z][a-z0-9_]*", role) for role in self.delegation_approval_role_set
+        ):
+            raise ValueError("DELEGATION_APPROVAL_ROLES must be comma-separated agent role keys")
         if self.ai_provider == "openai" and not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required when AI_PROVIDER=openai")
         if self.auth_enabled and not self.app_api_key:

@@ -130,6 +130,7 @@ class DelegationRead(ORMModel):
     timeout_seconds: int
     cost_budget_usd: float
     policy_snapshot: dict
+    approval_id: str | None
     task_run_id: str | None
     runtime_name: str | None
     provider: str | None
