@@ -88,7 +88,6 @@ def _templates() -> list[dict]:
     for record in records:
         payload = json.dumps(record["definition"], sort_keys=True, separators=(",", ":"))
         record["checksum"] = hashlib.sha256(payload.encode()).hexdigest()
-        record["definition"] = payload
         record["active"] = True
         record["created_at"] = now
         record["updated_at"] = now
@@ -165,6 +164,8 @@ def upgrade() -> None:
         op.f("ix_workflow_runs_workflow_key"), "workflow_runs", ["workflow_key"], unique=False
     )
 
+    online_migration = not op.get_context().as_sql
+    definition_type: sa.types.TypeEngine = sa.JSON() if online_migration else sa.Text()
     workflow_definition_seed = sa.table(
         "workflow_definitions",
         sa.column("id", sa.String()),
@@ -172,13 +173,24 @@ def upgrade() -> None:
         sa.column("version", sa.String()),
         sa.column("name", sa.String()),
         sa.column("description", sa.Text()),
-        sa.column("definition", sa.Text()),
+        sa.column("definition", definition_type),
         sa.column("checksum", sa.String()),
         sa.column("active", sa.Boolean()),
         sa.column("created_at", sa.DateTime(timezone=True)),
         sa.column("updated_at", sa.DateTime(timezone=True)),
     )
-    op.bulk_insert(workflow_definition_seed, _templates())
+    records = _templates()
+    if not online_migration:
+        records = [
+            {
+                **record,
+                "definition": json.dumps(
+                    record["definition"], sort_keys=True, separators=(",", ":")
+                ),
+            }
+            for record in records
+        ]
+    op.bulk_insert(workflow_definition_seed, records)
 
 
 def downgrade() -> None:
