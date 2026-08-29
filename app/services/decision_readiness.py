@@ -115,11 +115,7 @@ def _classify(
 
 def _sort_key(item: DecisionReadinessItemRead) -> tuple[object, ...]:
     deadline = min(
-        (
-            value
-            for value in (item.review_due_at, item.expires_at)
-            if value is not None
-        ),
+        (value for value in (item.review_due_at, item.expires_at) if value is not None),
         default=datetime.max.replace(tzinfo=UTC),
     )
     return (
@@ -142,9 +138,7 @@ async def build_decision_readiness(
     """Build a deterministic, tenant-safe readiness queue without writes or AI calls."""
 
     current = _as_utc(now or datetime.now(UTC))
-    decisions = list(
-        await session.scalars(select(Decision).where(Decision.tenant_id == tenant_id))
-    )
+    decisions = list(await session.scalars(select(Decision).where(Decision.tenant_id == tenant_id)))
     evidence = list(
         await session.scalars(
             select(ProvenanceRecord).where(
@@ -162,8 +156,7 @@ async def build_decision_readiness(
     for decision in decisions:
         counts = evidence_by_decision[decision.id]
         normalized_counts = {
-            status.value: counts[status.value]
-            for status in ProvenanceVerificationStatus
+            status.value: counts[status.value] for status in ProvenanceVerificationStatus
         }
         level, reason, signals = _classify(decision, counts, current)
         items.append(
