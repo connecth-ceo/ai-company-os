@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agents.tool_gateway import public_tool_catalog
+from app.connectors.catalog import public_connector_catalog
 from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
@@ -65,6 +66,7 @@ from app.schemas import (
     CommitmentTransition,
     CompanyContextResourceType,
     CompanyContextSearchResponse,
+    ConnectorDescriptorRead,
     DecisionCreate,
     DecisionFollowThroughRead,
     DecisionRead,
@@ -396,6 +398,28 @@ async def get_tool_catalog(
             approval_required=item.approval_required,
         )
         for item in public_tool_catalog()
+    ]
+
+
+@router.get("/connector-catalog", response_model=list[ConnectorDescriptorRead])
+async def get_connector_catalog(
+    _: TenantContext = Depends(get_tenant_context),
+) -> list[ConnectorDescriptorRead]:
+    return [
+        ConnectorDescriptorRead(
+            key=item.key,
+            version=item.version,
+            provider=item.provider,
+            purpose=item.purpose,
+            action_types=list(item.action_types),
+            risk=item.risk.value,
+            side_effects=item.side_effects,
+            approval_required=item.approval_required,
+            ledger_preparation_available=item.ledger_preparation_available,
+            ledger_claim_available=item.ledger_claim_available,
+            external_execution_available=item.external_execution_available,
+        )
+        for item in public_connector_catalog()
     ]
 
 

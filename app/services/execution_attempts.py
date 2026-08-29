@@ -1,8 +1,10 @@
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.connectors.catalog import ConnectorPolicyError, require_connector_action
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import (
@@ -28,6 +30,18 @@ class ExecutionAttemptRejected(ValueError):
         super().__init__(detail)
         self.code = code
         self.detail = detail
+
+
+def _require_connector(
+    connector_key: str,
+    action_type: str,
+    *,
+    phase: Literal["prepare", "claim", "complete"],
+) -> None:
+    try:
+        require_connector_action(connector_key, action_type, phase=phase)
+    except ConnectorPolicyError as exc:
+        raise ExecutionAttemptRejected(exc.code, exc.detail) from exc
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -134,6 +148,7 @@ async def prepare_execution_attempt(
         expected_payload_hash=payload.expected_payload_hash,
         current=current,
     )
+    _require_connector(payload.connector_key, intent.action_type, phase="prepare")
 
     existing_key = await session.scalar(
         select(ExecutionAttempt).where(
@@ -234,6 +249,7 @@ async def claim_execution_attempt(
             "attempt_not_prepared",
             "Only a prepared execution attempt can be claimed",
         )
+    _require_connector(attempt.connector_key, attempt.action_type, phase="claim")
 
     intent = await _load_intent(
         session,
@@ -326,6 +342,7 @@ async def complete_execution_attempt(
             "attempt_not_claimed",
             "Execution attempt must be claimed before recording an outcome",
         )
+    _require_connector(attempt.connector_key, attempt.action_type, phase="complete")
 
     intent = await _load_intent(
         session,

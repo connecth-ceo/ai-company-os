@@ -402,6 +402,20 @@ class ToolDescriptorRead(BaseModel):
     approval_required: bool
 
 
+class ConnectorDescriptorRead(BaseModel):
+    key: str
+    version: str
+    provider: str
+    purpose: str
+    action_types: list[str]
+    risk: str
+    side_effects: bool
+    approval_required: bool
+    ledger_preparation_available: bool
+    ledger_claim_available: bool
+    external_execution_available: bool
+
+
 class AgentDirectoryEntryRead(BaseModel):
     key: str
     role: str

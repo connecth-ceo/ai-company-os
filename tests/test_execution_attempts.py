@@ -34,7 +34,7 @@ def approve(client, intent: dict) -> None:
 def preparation_payload(intent: dict, *, key: str = "execution-attempt-001") -> dict:
     return {
         "expected_payload_hash": intent["payload_hash"],
-        "connector_key": "smartstore_connector",
+        "connector_key": "external_publish_gateway",
         "idempotency_key": key,
         "timeout_seconds": 45,
     }
@@ -70,6 +70,26 @@ def test_execution_attempt_requires_approved_intent(client):
     assert client.get("/api/v1/execution-attempts").json() == []
 
 
+def test_execution_attempt_rejects_unknown_or_mismatched_connector(client):
+    intent = client.post("/api/v1/action-intents", json=action_payload()).json()
+    approve(client, intent)
+
+    unknown = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json={**preparation_payload(intent), "connector_key": "unknown_gateway"},
+    )
+    mismatch = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json={**preparation_payload(intent), "connector_key": "email_gateway"},
+    )
+
+    assert unknown.status_code == 409
+    assert unknown.json()["detail"]["code"] == "connector_not_registered"
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["code"] == "connector_action_not_allowed"
+    assert client.get("/api/v1/execution-attempts").json() == []
+
+
 def test_execution_attempt_prepare_is_immutable_idempotent_and_side_effect_free(client):
     intent = client.post("/api/v1/action-intents", json=action_payload()).json()
     approve(client, intent)
@@ -91,7 +111,7 @@ def test_execution_attempt_prepare_is_immutable_idempotent_and_side_effect_free(
     assert attempt["status"] == "prepared"
     assert attempt["payload_hash"] == intent["payload_hash"]
     assert attempt["action_type"] == intent["action_type"]
-    assert attempt["connector_key"] == "smartstore_connector"
+    assert attempt["connector_key"] == "external_publish_gateway"
     assert attempt["claimed_at"] is None
     assert attempt["deadline_at"] is None
     assert client.get(f"/api/v1/action-intents/{intent['id']}").json()["status"] == "approved"
