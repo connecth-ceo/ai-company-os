@@ -82,10 +82,26 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .attention-item strong { display: block; font-size: 14px; }
 .attention-item p { margin: 6px 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
 .attention-item small { display: block; color: var(--muted); line-height: 1.45; }
+.portfolio-health { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin: 0 0 14px; }
+.portfolio-health > .empty { grid-column: 1 / -1; }
+.portfolio-health-stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #f7f5ee; min-width: 0; }
+.portfolio-health-stat span { display: block; color: var(--muted); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.portfolio-health-stat strong { display: block; margin-top: 4px; color: var(--forest); font: 600 19px Georgia, serif; }
+.portfolio-health-stat.health-watch { background: #fffdf1; }
+.portfolio-health-stat.health-action { background: #fff9f3; }
+.portfolio-health-stat.health-critical { background: #fff5f2; }
 .goal-list, .project-list, .agent-list { display: grid; gap: 10px; }
 .goal-card, .project-card, .agent-card { border: 1px solid var(--line); border-radius: 13px; padding: 15px 16px; min-width: 0; }
 .goal-card { border-left: 4px solid var(--lime); background: #fafbf7; }
 .project-heading, .agent-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.portfolio-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.portfolio-health-chip { border-radius: 999px; padding: 4px 8px; background: #e7e6df; color: var(--muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.portfolio-health-chip.health-healthy { background: #dff2d9; color: #25603f; }
+.portfolio-health-chip.health-watch { background: #fff1c8; color: #795b00; }
+.portfolio-health-chip.health-action { background: #fde5d5; color: #8a4a21; }
+.portfolio-health-chip.health-critical { background: #f8ddd4; color: #8a3821; }
+.portfolio-progress { height: 6px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: #e7e6df; }
+.portfolio-progress span { display: block; height: 100%; border-radius: inherit; background: var(--forest); }
 .goal-card strong, .project-card strong, .agent-card strong { display: block; font-size: 14px; }
 .goal-card p, .project-card p, .agent-card p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .goal-metric { margin-top: 9px; color: var(--forest); font-size: 12px; font-weight: 750; }
@@ -171,6 +187,7 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .commitment-item { align-items: flex-start; flex-direction: column; }
   .activity-list, .context-grid, .attention-list, .agent-list { grid-template-columns: 1fr; }
+  .portfolio-health { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
   .shell { padding: 34px 16px 70px; }
@@ -182,4 +199,6 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .panel-heading { align-items: flex-start; }
   .panel-actions { align-items: stretch; flex-direction: column; }
   .context-search-row { flex-direction: column; }
+  .portfolio-health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
