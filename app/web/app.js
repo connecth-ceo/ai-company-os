@@ -11,6 +11,7 @@ const state = {
   knowledge: [],
   projects: [],
   agents: [],
+  contextSearch: { query: "", total: 0, items: [] },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -72,6 +73,10 @@ const projectStatusLabels = {
 
 const evaluationStatusLabels = {
   untested: "미평가", baseline: "기준 검증", pilot: "파일럿", approved: "운영 승인",
+};
+
+const contextResourceLabels = {
+  memory: "기억", decision: "대표 결정", knowledge: "지식",
 };
 
 function projectTitle(projectId) {
@@ -263,6 +268,27 @@ function renderCompanyContext() {
   `).join("") : '<p class="empty">아직 축적된 지식이 없습니다.</p>';
 }
 
+function renderContextSearch() {
+  const results = $("#context-search-results");
+  if (!state.contextSearch.query) {
+    results.innerHTML = "";
+    return;
+  }
+  if (!state.contextSearch.items.length) {
+    results.innerHTML = '<p class="empty">일치하는 회사 맥락이 없습니다.</p>';
+    return;
+  }
+  results.innerHTML = state.contextSearch.items.map((item) => `
+    <article class="search-result">
+      <div class="search-result-heading">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span class="search-result-type">${escapeHtml(contextResourceLabels[item.resource_type] || item.resource_type)}</span>
+      </div>
+      <p>${escapeHtml(item.excerpt)}</p>
+    </article>
+  `).join("");
+}
+
 async function loadDashboard() {
   try {
     const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, projects, agents] = await Promise.all([
@@ -350,6 +376,23 @@ $("#add-decision-button").addEventListener("click", () => {
 });
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close());
+});
+
+$("#context-search-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const query = $("#context-search-query").value.trim();
+  if (query.length < 2) return;
+  $("#context-search-status").textContent = "회사 맥락을 찾는 중입니다…";
+  try {
+    state.contextSearch = await api(
+      `/api/v1/context/search?q=${encodeURIComponent(query)}&limit=12`,
+    );
+    renderContextSearch();
+    $("#context-search-status").textContent =
+      `전체 ${state.contextSearch.total}건 중 ${state.contextSearch.items.length}건 표시`;
+  } catch (error) {
+    $("#context-search-status").textContent = error.message;
+  }
 });
 
 $("#project-form").addEventListener("submit", async (event) => {

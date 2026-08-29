@@ -49,6 +49,8 @@ from app.schemas import (
     CommitmentCreate,
     CommitmentRead,
     CommitmentTransition,
+    CompanyContextResourceType,
+    CompanyContextSearchResponse,
     DecisionCreate,
     DecisionRead,
     DecisionTransition,
@@ -71,7 +73,14 @@ from app.schemas import (
     WorkflowDefinitionRead,
     WorkflowRunRead,
 )
-from app.services import action_intents, agent_directory, attention, commitments, decision_memory
+from app.services import (
+    action_intents,
+    agent_directory,
+    attention,
+    commitments,
+    company_search,
+    decision_memory,
+)
 from app.services.ai_costs import (
     get_current_month_cost_summary,
     release_delegation_cost_reservation,
@@ -108,6 +117,29 @@ async def get_agent(
     if profile is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return profile
+
+
+@router.get("/context/search", response_model=CompanyContextSearchResponse)
+async def search_company_context(
+    q: str = Query(min_length=2, max_length=200),
+    resource_types: list[CompanyContextResourceType] | None = Query(
+        default=None,
+        alias="type",
+    ),
+    effective_decisions_only: bool = Query(default=True),
+    limit: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> CompanyContextSearchResponse:
+    selected_types = set(resource_types or CompanyContextResourceType)
+    return await company_search.search_company_context(
+        session,
+        tenant_id=context.tenant_id,
+        query=q,
+        resource_types=selected_types,
+        effective_decisions_only=effective_decisions_only,
+        limit=limit,
+    )
 
 
 def action_intent_rejection(error: action_intents.ActionIntentRejected) -> HTTPException:

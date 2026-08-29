@@ -7,6 +7,8 @@ def test_ceo_desk_exposes_project_and_ai_team_panels(client):
     assert 'id="project-list"' in html
     assert 'id="project-form"' in html
     assert 'id="agent-list"' in html
+    assert 'id="context-search-form"' in html
+    assert 'id="context-search-results"' in html
     assert "프롬프트와 비밀값은 노출하지 않습니다." in html
 
 
@@ -18,8 +20,10 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert stylesheet.status_code == 200
     assert 'api("/api/v1/projects")' in script.text
     assert 'api("/api/v1/agents")' in script.text
+    assert "/api/v1/context/search?q=" in script.text
     assert 'project_id: $("#task-project").value || null' in script.text
     assert "renderProjects()" in script.text
     assert "renderAgents()" in script.text
     assert ".executive-grid" in stylesheet.text
     assert ".agent-card" in stylesheet.text
+    assert ".context-search-form" in stylesheet.text

@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import date, datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -326,6 +327,28 @@ class MemoryRead(ORMModel):
     content: str
     source_task_id: str | None
     created_at: datetime
+
+
+class CompanyContextResourceType(StrEnum):
+    MEMORY = "memory"
+    DECISION = "decision"
+    KNOWLEDGE = "knowledge"
+
+
+class CompanyContextSearchItem(BaseModel):
+    resource_type: CompanyContextResourceType
+    resource_id: str
+    title: str
+    excerpt: str
+    score: int = Field(ge=1)
+    created_at: datetime
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class CompanyContextSearchResponse(BaseModel):
+    query: str
+    total: int = Field(ge=0)
+    items: list[CompanyContextSearchItem]
 
 
 class DecisionCreate(BaseModel):

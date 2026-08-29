@@ -119,6 +119,15 @@
             <button class="primary-button compact-button" id="add-decision-button">대표 결정 기록</button>
           </div>
         </div>
+        <form id="context-search-form" class="context-search-form">
+          <label for="context-search-query">기억·결정·지식 통합 검색</label>
+          <div class="context-search-row">
+            <input id="context-search-query" required minlength="2" maxlength="200" placeholder="예: Project Atlas 출시" />
+            <button class="primary-button compact-button" type="submit">검색</button>
+          </div>
+          <p class="form-status" id="context-search-status" aria-live="polite"></p>
+        </form>
+        <div id="context-search-results" class="context-search-results"></div>
         <div class="context-grid">
           <div class="context-card">
             <span class="context-count" id="memory-count">0</span>
