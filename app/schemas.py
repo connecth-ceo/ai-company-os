@@ -92,6 +92,47 @@ class PortfolioHealthRead(BaseModel):
     projects: list[PortfolioProjectHealthRead]
 
 
+class ProvenanceQualityLevel(StrEnum):
+    HEALTHY = "healthy"
+    WATCH = "watch"
+    ACTION = "action"
+    CRITICAL = "critical"
+
+
+class ProvenanceQualityItemRead(BaseModel):
+    id: str
+    subject_type: ProvenanceSubjectType
+    source_type: ProvenanceSourceType
+    source_label: str
+    source_uri: str | None
+    knowledge_item_id: str | None
+    decision_id: str | None
+    task_id: str | None
+    verification_status: ProvenanceVerificationStatus
+    quality_level: ProvenanceQualityLevel
+    quality_reason: str
+    content_hash: str
+    captured_at: datetime
+    review_count: int
+    latest_reviewed_at: datetime | None
+
+
+class ProvenanceQualitySummaryRead(BaseModel):
+    total_records: int
+    verified_records: int
+    rejected_records: int
+    needs_review_records: int
+    verification_coverage_percent: int
+    quality_counts: dict[str, int]
+
+
+class ProvenanceQualityRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    summary: ProvenanceQualitySummaryRead
+    items: list[ProvenanceQualityItemRead]
+
+
 class AttentionItemRead(BaseModel):
     id: str
     level: AttentionLevel
