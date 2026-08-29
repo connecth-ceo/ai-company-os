@@ -177,6 +177,50 @@ class DecisionReadinessRead(BaseModel):
     items: list[DecisionReadinessItemRead]
 
 
+class DecisionFollowThroughLevel(StrEnum):
+    UNTRACKED = "untracked"
+    AT_RISK = "at_risk"
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    COMPLETE = "complete"
+    INACTIVE = "inactive"
+
+
+class DecisionFollowThroughItemRead(BaseModel):
+    id: str
+    subject: str
+    choice: str
+    status: DecisionStatus
+    follow_through_level: DecisionFollowThroughLevel
+    follow_through_reason: str
+    commitment_counts: dict[str, int]
+    total_commitments: int
+    overdue_commitments: int
+    next_due_at: datetime | None
+    effective_at: datetime
+
+
+class DecisionFollowThroughSummaryRead(BaseModel):
+    total_decisions: int
+    active_decisions: int
+    linked_decisions: int
+    execution_coverage_percent: int
+    untracked_decisions: int
+    at_risk_decisions: int
+    planned_decisions: int
+    in_progress_decisions: int
+    complete_decisions: int
+    inactive_decisions: int
+    follow_through_counts: dict[str, int]
+
+
+class DecisionFollowThroughRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    summary: DecisionFollowThroughSummaryRead
+    items: list[DecisionFollowThroughItemRead]
+
+
 class AttentionItemRead(BaseModel):
     id: str
     level: AttentionLevel
