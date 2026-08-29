@@ -11,6 +11,7 @@ const state = {
   knowledge: [],
   goals: [],
   projects: [],
+  portfolioHealth: { summary: { health_counts: {} }, goals: [], projects: [] },
   agents: [],
   contextSearch: { query: "", total: 0, items: [] },
 };
@@ -77,6 +78,25 @@ const goalStatusLabels = {
   cancelled: "취소", archived: "보관",
 };
 
+const portfolioHealthLabels = {
+  healthy: "정상", watch: "관찰", action: "조치 필요", critical: "긴급", closed: "종료",
+};
+
+const portfolioHealthReasonLabels = {
+  on_track: "계획대로 진행 중",
+  target_date_overdue: "목표일 초과",
+  target_date_due_soon: "14일 이내 목표일",
+  goal_on_hold: "목표 보류 중",
+  project_on_hold: "프로젝트 보류 중",
+  failed_tasks: "실패 업무 확인 필요",
+  goal_not_started: "목표 시작 전",
+  project_not_started: "프로젝트 시작 전",
+  active_without_projects: "연결 프로젝트 없음",
+  active_without_tasks: "등록 업무 없음",
+  goal_closed: "종료된 목표",
+  project_closed: "종료된 프로젝트",
+};
+
 const goalTransitionOptions = {
   planned: [["active", "시작"], ["cancelled", "취소"]],
   active: [["on_hold", "보류"], ["achieved", "달성"], ["cancelled", "취소"]],
@@ -118,6 +138,38 @@ function projectTitle(projectId) {
 
 function goalTitle(goalId) {
   return state.goals.find((goal) => goal.id === goalId)?.title || "";
+}
+
+function portfolioHealthItem(kind, id) {
+  return (state.portfolioHealth[kind] || []).find((item) => item.id === id);
+}
+
+function portfolioProgress(item) {
+  if (!item) return "";
+  const percent = Number(item.completion_percent || 0);
+  return `
+    <div class="portfolio-progress" aria-label="업무 완료율 ${percent}%">
+      <span style="width: ${Math.min(100, Math.max(0, percent))}%"></span>
+    </div>`;
+}
+
+function portfolioHealthChip(item) {
+  if (!item) return "";
+  const label = portfolioHealthLabels[item.health_level] || item.health_level;
+  const reason = portfolioHealthReasonLabels[item.health_reason] || item.health_reason;
+  return `<span class="portfolio-health-chip health-${escapeHtml(item.health_level)}" title="${escapeHtml(reason)}">${escapeHtml(label)}</span>`;
+}
+
+function renderPortfolioHealth() {
+  const summary = state.portfolioHealth.summary || {};
+  const counts = summary.health_counts || {};
+  $("#portfolio-health").innerHTML = `
+    <div class="portfolio-health-stat"><span>전체 완료율</span><strong>${Number(summary.completion_percent || 0)}%</strong></div>
+    <div class="portfolio-health-stat"><span>열린 목표</span><strong>${Number(summary.open_goals || 0)}</strong></div>
+    <div class="portfolio-health-stat health-critical"><span>기한 초과</span><strong>${Number(summary.overdue_goals || 0)}</strong></div>
+    <div class="portfolio-health-stat health-watch"><span>마감 임박</span><strong>${Number(summary.due_soon_goals || 0)}</strong></div>
+    <div class="portfolio-health-stat health-action"><span>조치 필요</span><strong>${Number(counts.action || 0) + Number(counts.critical || 0)}</strong></div>
+  `;
 }
 
 function renderTasks() {
@@ -180,6 +232,7 @@ function renderProjects() {
     return;
   }
   $("#project-list").innerHTML = state.projects.slice(0, 8).map((project) => {
+    const health = portfolioHealthItem("projects", project.id);
     const tasks = state.tasks.filter((task) => task.project_id === project.id);
     const active = tasks.filter((task) => ["queued", "dispatched", "running"].includes(task.status)).length;
     const completed = tasks.filter((task) => task.status === "completed").length;
@@ -187,7 +240,10 @@ function renderProjects() {
       <article class="project-card">
         <div class="project-heading">
           <strong>${escapeHtml(project.title)}</strong>
-          <span class="project-status ${escapeHtml(project.status)}">${escapeHtml(projectStatusLabels[project.status] || project.status)}</span>
+          <div class="portfolio-badges">
+            ${portfolioHealthChip(health)}
+            <span class="project-status ${escapeHtml(project.status)}">${escapeHtml(projectStatusLabels[project.status] || project.status)}</span>
+          </div>
         </div>
         ${project.goal_id ? `<span class="project-goal">목표 · ${escapeHtml(goalTitle(project.goal_id) || "연결됨")}</span>` : ""}
         ${project.description ? `<p>${escapeHtml(project.description)}</p>` : ""}
@@ -196,6 +252,7 @@ function renderProjects() {
           <span class="project-stat">진행 ${active}</span>
           <span class="project-stat">완료 ${completed}</span>
         </div>
+        ${portfolioProgress(health)}
         ${portfolioActions("project", project.id, project.status)}
       </article>`;
   }).join("");
@@ -217,6 +274,7 @@ function renderGoals() {
     return;
   }
   $("#goal-list").innerHTML = state.goals.slice(0, 6).map((goal) => {
+    const health = portfolioHealthItem("goals", goal.id);
     const projects = state.projects.filter((project) => project.goal_id === goal.id);
     const projectIds = new Set(projects.map((project) => project.id));
     const tasks = state.tasks.filter((task) => projectIds.has(task.project_id));
@@ -228,7 +286,10 @@ function renderGoals() {
       <article class="goal-card">
         <div class="project-heading">
           <strong>${escapeHtml(goal.title)}</strong>
-          <span class="goal-status ${escapeHtml(goal.status)}">${escapeHtml(goalStatusLabels[goal.status] || goal.status)}</span>
+          <div class="portfolio-badges">
+            ${portfolioHealthChip(health)}
+            <span class="goal-status ${escapeHtml(goal.status)}">${escapeHtml(goalStatusLabels[goal.status] || goal.status)}</span>
+          </div>
         </div>
         ${goal.description ? `<p>${escapeHtml(goal.description)}</p>` : ""}
         ${goal.success_metric ? `<div class="goal-metric">성공 기준 · ${escapeHtml(goal.success_metric)}</div>` : ""}
@@ -238,6 +299,7 @@ function renderGoals() {
           <span class="project-stat">프로젝트 ${projects.length}</span>
           <span class="project-stat">완료 업무 ${completed}/${tasks.length}</span>
         </div>
+        ${portfolioProgress(health)}
         ${portfolioActions("goal", goal.id, goal.status)}
       </article>`;
   }).join("");
@@ -372,7 +434,7 @@ function renderContextSearch() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, goals, projects, agents] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, goals, projects, portfolioHealth, agents] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
@@ -380,6 +442,7 @@ async function loadDashboard() {
       api("/api/v1/knowledge"),
       api("/api/v1/goals"),
       api("/api/v1/projects"),
+      api("/api/v1/portfolio/health"),
       api("/api/v1/agents"),
     ]);
     state.tasks = await Promise.all(tasks.map((task) => api(`/api/v1/tasks/${task.id}`)));
@@ -392,8 +455,9 @@ async function loadDashboard() {
     state.knowledge = knowledge;
     state.goals = goals;
     state.projects = projects;
+    state.portfolioHealth = portfolioHealth;
     state.agents = agents;
-    renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderAgents();
+    renderPortfolioHealth(); renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderAgents();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
