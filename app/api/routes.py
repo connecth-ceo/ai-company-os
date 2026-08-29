@@ -57,6 +57,7 @@ from app.schemas import (
     CompanyContextResourceType,
     CompanyContextSearchResponse,
     DecisionCreate,
+    DecisionFollowThroughRead,
     DecisionRead,
     DecisionReadinessRead,
     DecisionTransition,
@@ -94,6 +95,7 @@ from app.services import (
     attention,
     commitments,
     company_search,
+    decision_follow_through,
     decision_memory,
     decision_readiness,
     portfolio,
@@ -1061,6 +1063,23 @@ async def get_decision_readiness(
         context.tenant_id,
         include_ready=include_ready,
         include_closed=include_closed,
+        limit=limit,
+    )
+
+
+@router.get("/decisions/follow-through", response_model=DecisionFollowThroughRead)
+async def get_decision_follow_through(
+    include_complete: bool = Query(default=False),
+    include_inactive: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> DecisionFollowThroughRead:
+    return await decision_follow_through.build_decision_follow_through(
+        session,
+        context.tenant_id,
+        include_complete=include_complete,
+        include_inactive=include_inactive,
         limit=limit,
     )
 
