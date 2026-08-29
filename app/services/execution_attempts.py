@@ -10,6 +10,7 @@ from app.connectors.contracts import (
     require_payload_contract,
     validate_connector_payload,
 )
+from app.connectors.runtime import ConnectorAdapterRegistry
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import (
@@ -114,6 +115,7 @@ async def preflight_execution_attempt(
     *,
     tenant_id: str,
     attempt_id: str,
+    registry: ConnectorAdapterRegistry,
     now: datetime | None = None,
 ) -> ExecutionAttemptPreflightRead:
     """Diagnose execution blockers without claiming, mutating, or calling a provider."""
@@ -198,7 +200,7 @@ async def preflight_execution_attempt(
             approval_valid = False
 
     external_execution_available = bool(
-        descriptor is not None and descriptor.external_execution_available
+        descriptor is not None and registry.available(attempt.connector_key, attempt.action_type)
     )
     if not external_execution_available:
         blockers.append("external_adapter_unavailable")

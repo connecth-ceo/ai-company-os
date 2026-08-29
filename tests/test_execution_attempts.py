@@ -224,6 +224,36 @@ def test_execution_preflight_is_read_only_and_reports_adapter_blocker(client):
     assert client.get("/api/v1/audit-events").json() == events_before
 
 
+def test_execution_preflight_uses_the_same_runtime_availability_as_dispatch(client):
+    intent = client.post("/api/v1/action-intents", json=action_payload()).json()
+    approve(client, intent)
+    attempt = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json=preparation_payload(intent),
+    ).json()
+
+    class AvailableAdapter:
+        connector_key = "external_publish_gateway"
+        adapter_version = "test-v1"
+        action_types = ("external_publish",)
+
+        async def execute(self, invocation: ConnectorInvocation) -> ConnectorResult:
+            raise AssertionError("Preflight must not execute an adapter")
+
+    registry = ConnectorAdapterRegistry((AvailableAdapter(),))
+    app.dependency_overrides[get_connector_adapter_registry] = lambda: registry
+    try:
+        response = client.get(f"/api/v1/execution-attempts/{attempt['id']}/preflight")
+    finally:
+        app.dependency_overrides.pop(get_connector_adapter_registry, None)
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["external_execution_available"] is True
+    assert report["executable"] is True
+    assert report["blockers"] == []
+
+
 def test_execution_preflight_detects_tampering_without_disclosing_payload(client):
     intent = client.post(
         "/api/v1/action-intents",

@@ -30,6 +30,10 @@ payload bytes는 객체 repr에서 숨겨 우발적인 로그 복제를 줄인�
 fail-closed 한다. 현재 운영 registry는 비어 있으므로 외부 API를 호출하지 않는다. 공급자를 선정하면
 해당 adapter만 이 포트를 구현하고 catalog 가용성을 켜는 방식으로 추가한다.
 
+catalog와 preflight의 `external_execution_available`은 고정 설정이 아니라 같은 runtime registry의
+실제 connector/action 설치 상태에서 계산한다. 따라서 화면에는 실행 가능으로 보이지만 dispatch에는
+adapter가 없는 구성 불일치를 만들 수 없다.
+
 ## Dispatch 조정기
 
 `POST /api/v1/execution-attempts/{attempt_id}/dispatch`는 이미 claim된 실행만 받으며 아래 세 구간을

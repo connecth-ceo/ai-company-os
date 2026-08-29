@@ -1,8 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Literal
 
 from app.connectors.contracts import payload_contracts_for
+from app.connectors.runtime import (
+    EMPTY_CONNECTOR_ADAPTER_REGISTRY,
+    ConnectorAdapterRegistry,
+)
 
 
 class ConnectorRisk(StrEnum):
@@ -77,8 +81,18 @@ for _connector in _CATALOG.values():
     payload_contracts_for(_connector.action_types)
 
 
-def public_connector_catalog() -> tuple[ConnectorDescriptor, ...]:
-    return tuple(_CATALOG[key] for key in sorted(_CATALOG))
+def public_connector_catalog(
+    registry: ConnectorAdapterRegistry = EMPTY_CONNECTOR_ADAPTER_REGISTRY,
+) -> tuple[ConnectorDescriptor, ...]:
+    return tuple(
+        replace(
+            _CATALOG[key],
+            external_execution_available=any(
+                registry.available(key, action_type) for action_type in _CATALOG[key].action_types
+            ),
+        )
+        for key in sorted(_CATALOG)
+    )
 
 
 def require_connector_action(
@@ -111,11 +125,15 @@ def require_connector_action(
     return descriptor
 
 
-def require_external_execution(connector_key: str, action_type: str) -> ConnectorDescriptor:
+def require_external_execution(
+    connector_key: str,
+    action_type: str,
+    registry: ConnectorAdapterRegistry = EMPTY_CONNECTOR_ADAPTER_REGISTRY,
+) -> ConnectorDescriptor:
     descriptor = require_connector_action(connector_key, action_type, phase="claim")
-    if not descriptor.external_execution_available:
+    if not registry.available(connector_key, action_type):
         raise ConnectorPolicyError(
             "connector_external_execution_disabled",
             f"Connector '{connector_key}' has no external execution adapter",
         )
-    return descriptor
+    return replace(descriptor, external_execution_available=True)

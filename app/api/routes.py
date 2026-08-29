@@ -326,6 +326,7 @@ async def list_execution_attempts(
 async def preflight_execution_attempt(
     attempt_id: str,
     session: AsyncSession = Depends(get_session),
+    registry: ConnectorAdapterRegistry = Depends(get_connector_adapter_registry),
     context: TenantContext = Depends(get_tenant_context),
 ) -> ExecutionAttemptPreflightRead:
     try:
@@ -333,6 +334,7 @@ async def preflight_execution_attempt(
             session,
             tenant_id=context.tenant_id,
             attempt_id=attempt_id,
+            registry=registry,
         )
     except execution_attempts.ExecutionAttemptRejected as exc:
         raise execution_attempt_rejection(exc) from exc
@@ -480,6 +482,7 @@ async def get_tool_catalog(
 
 @router.get("/connector-catalog", response_model=list[ConnectorDescriptorRead])
 async def get_connector_catalog(
+    registry: ConnectorAdapterRegistry = Depends(get_connector_adapter_registry),
     _: TenantContext = Depends(get_tenant_context),
 ) -> list[ConnectorDescriptorRead]:
     return [
@@ -504,7 +507,7 @@ async def get_connector_catalog(
             ledger_claim_available=item.ledger_claim_available,
             external_execution_available=item.external_execution_available,
         )
-        for item in public_connector_catalog()
+        for item in public_connector_catalog(registry)
     ]
 
 

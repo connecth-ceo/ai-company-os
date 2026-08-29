@@ -1,6 +1,22 @@
 import pytest
 
 from app.connectors.catalog import ConnectorPolicyError, require_external_execution
+from app.connectors.runtime import (
+    ConnectorAdapterRegistry,
+    ConnectorInvocation,
+    ConnectorResult,
+    get_connector_adapter_registry,
+)
+from app.main import app
+
+
+class AvailablePublishAdapter:
+    connector_key = "external_publish_gateway"
+    adapter_version = "test-v1"
+    action_types = ("external_publish",)
+
+    async def execute(self, invocation: ConnectorInvocation) -> ConnectorResult:
+        raise AssertionError("Catalog inspection must not execute an adapter")
 
 
 def test_connector_catalog_is_read_only_secret_free_and_execution_disabled(client):
@@ -66,6 +82,27 @@ def test_connector_external_execution_fails_closed_without_adapter():
         require_external_execution("smartstore_gateway", "smartstore_product_publish")
 
     assert caught.value.code == "connector_external_execution_disabled"
+
+
+def test_connector_catalog_derives_availability_from_installed_runtime_adapter(client):
+    registry = ConnectorAdapterRegistry((AvailablePublishAdapter(),))
+    app.dependency_overrides[get_connector_adapter_registry] = lambda: registry
+    try:
+        response = client.get("/api/v1/connector-catalog")
+    finally:
+        app.dependency_overrides.pop(get_connector_adapter_registry, None)
+
+    assert response.status_code == 200
+    catalog = {item["key"]: item for item in response.json()}
+    assert catalog["external_publish_gateway"]["external_execution_available"] is True
+    assert catalog["email_gateway"]["external_execution_available"] is False
+    assert catalog["smartstore_gateway"]["external_execution_available"] is False
+    enabled = require_external_execution(
+        "external_publish_gateway",
+        "external_publish",
+        registry,
+    )
+    assert enabled.external_execution_available is True
 
 
 def test_connector_catalog_has_no_write_endpoint(client):
