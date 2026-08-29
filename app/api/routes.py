@@ -29,6 +29,9 @@ from app.models import (
     KnowledgeItem,
     Memory,
     Project,
+    ProvenanceRecord,
+    ProvenanceSubjectType,
+    ProvenanceVerificationStatus,
     Task,
     TaskRun,
     WorkflowDefinition,
@@ -72,6 +75,7 @@ from app.schemas import (
     ProjectCreate,
     ProjectRead,
     ProjectTransition,
+    ProvenanceRead,
     TaskCreate,
     TaskDetail,
     TaskRead,
@@ -1203,6 +1207,54 @@ async def list_knowledge(
         .order_by(KnowledgeItem.created_at.desc())
     )
     return list(await session.scalars(query))
+
+
+@router.get("/provenance", response_model=list[ProvenanceRead])
+async def list_provenance(
+    subject_type: ProvenanceSubjectType | None = Query(default=None),
+    knowledge_item_id: str | None = Query(default=None, max_length=36),
+    decision_id: str | None = Query(default=None, max_length=36),
+    task_id: str | None = Query(default=None, max_length=36),
+    verification_status: ProvenanceVerificationStatus | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[ProvenanceRecord]:
+    conditions = [ProvenanceRecord.tenant_id == context.tenant_id]
+    if subject_type is not None:
+        conditions.append(ProvenanceRecord.subject_type == subject_type)
+    if knowledge_item_id is not None:
+        conditions.append(ProvenanceRecord.knowledge_item_id == knowledge_item_id)
+    if decision_id is not None:
+        conditions.append(ProvenanceRecord.decision_id == decision_id)
+    if task_id is not None:
+        conditions.append(ProvenanceRecord.task_id == task_id)
+    if verification_status is not None:
+        conditions.append(ProvenanceRecord.verification_status == verification_status)
+    query = (
+        select(ProvenanceRecord)
+        .where(*conditions)
+        .order_by(ProvenanceRecord.captured_at.desc(), ProvenanceRecord.created_at.desc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.get("/provenance/{record_id}", response_model=ProvenanceRead)
+async def get_provenance(
+    record_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ProvenanceRecord:
+    item = await session.scalar(
+        select(ProvenanceRecord).where(
+            ProvenanceRecord.id == record_id,
+            ProvenanceRecord.tenant_id == context.tenant_id,
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Provenance record not found")
+    return item
 
 
 @router.post("/approvals", response_model=ApprovalRead, status_code=201)

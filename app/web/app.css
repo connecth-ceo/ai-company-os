@@ -165,6 +165,21 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .decision-state.proposed { background: #fff1c8; color: #795b00; }
 .context-action { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: var(--surface); color: var(--forest); font-weight: 700; }
 .context-action.danger { color: #8a3821; }
+.provenance-heading { position: relative; display: flex; align-items: center; justify-content: space-between; margin: 24px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+.provenance-heading h3 { margin: 0; font-size: 17px; }
+.provenance-heading .eyebrow { margin-bottom: 5px; }
+.provenance-count { position: static; }
+.provenance-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.provenance-item { border: 1px solid var(--line); border-left: 4px solid var(--forest); border-radius: 12px; padding: 13px 15px; min-width: 0; }
+.provenance-item strong { display: block; margin: 8px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.provenance-meta, .provenance-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.provenance-status { border-radius: 999px; padding: 3px 7px; background: #e7e6df; font-weight: 800; }
+.provenance-status.observed { background: #e8f1f5; color: #24546a; }
+.provenance-status.verified { background: #dff2d9; color: #25603f; }
+.provenance-status.rejected { background: #f8ddd4; color: #8a3821; }
+.provenance-detail a { color: var(--forest); font-weight: 800; }
+.provenance-detail code { overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.provenance-no-link { color: var(--muted); }
 .activity-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .activity-item { border-left: 2px solid var(--lime); padding-left: 12px; font-size: 13px; }
 .activity-item strong { display: block; }
@@ -186,7 +201,7 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .hero { gap: 30px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .commitment-item { align-items: flex-start; flex-direction: column; }
-  .activity-list, .context-grid, .attention-list, .agent-list { grid-template-columns: 1fr; }
+  .activity-list, .context-grid, .attention-list, .agent-list, .provenance-list { grid-template-columns: 1fr; }
   .portfolio-health { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
