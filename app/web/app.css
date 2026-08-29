@@ -169,6 +169,18 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .provenance-heading h3 { margin: 0; font-size: 17px; }
 .provenance-heading .eyebrow { margin-bottom: 5px; }
 .provenance-count { position: static; }
+.provenance-quality { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: #f7f8f2; }
+.provenance-quality-summary { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 10px; }
+.provenance-quality-summary span { border-radius: 999px; padding: 6px 9px; background: var(--surface); color: var(--muted); font-size: 11px; }
+.provenance-quality-summary strong { color: var(--forest); }
+.provenance-quality-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.provenance-quality-item { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; border-left: 3px solid #d0a83a; padding: 8px 10px; background: var(--surface); border-radius: 8px; min-width: 0; }
+.provenance-quality-item.level-critical { border-left-color: #a8442b; }
+.provenance-quality-item.level-action { border-left-color: #d08028; }
+.provenance-quality-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.provenance-quality-item small { grid-column: 2; color: var(--muted); font-size: 10px; }
+.provenance-quality-level { border-radius: 999px; padding: 2px 6px; background: #f4e8bd; color: #765813; font-size: 9px; font-weight: 800; }
+.provenance-quality-item.level-critical .provenance-quality-level { background: #f8ddd4; color: #8a3821; }
 .provenance-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .provenance-item { border: 1px solid var(--line); border-left: 4px solid var(--forest); border-radius: 12px; padding: 13px 15px; min-width: 0; }
 .provenance-item strong { display: block; margin: 8px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -205,7 +217,7 @@ dialog .primary-button { width: 100%; margin-top: 20px; }
   .hero { gap: 30px; }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .commitment-item { align-items: flex-start; flex-direction: column; }
-  .activity-list, .context-grid, .attention-list, .agent-list, .provenance-list { grid-template-columns: 1fr; }
+  .activity-list, .context-grid, .attention-list, .agent-list, .provenance-list, .provenance-quality-list { grid-template-columns: 1fr; }
   .portfolio-health { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {

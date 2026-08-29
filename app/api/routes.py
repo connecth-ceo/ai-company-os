@@ -76,6 +76,7 @@ from app.schemas import (
     ProjectCreate,
     ProjectRead,
     ProjectTransition,
+    ProvenanceQualityRead,
     ProvenanceRead,
     ProvenanceReviewCreate,
     ProvenanceReviewRead,
@@ -95,6 +96,7 @@ from app.services import (
     decision_memory,
     portfolio,
     portfolio_health,
+    provenance_quality,
     provenance_reviews,
 )
 from app.services.ai_costs import (
@@ -1242,6 +1244,21 @@ async def list_provenance(
         .limit(limit)
     )
     return list(await session.scalars(query))
+
+
+@router.get("/provenance/quality", response_model=ProvenanceQualityRead)
+async def get_provenance_quality(
+    include_verified: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ProvenanceQualityRead:
+    return await provenance_quality.build_provenance_quality(
+        session,
+        context.tenant_id,
+        include_verified=include_verified,
+        limit=limit,
+    )
 
 
 @router.get("/provenance/{record_id}", response_model=ProvenanceRead)
