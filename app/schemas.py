@@ -669,4 +669,3 @@ class AuditEventRead(ORMModel):
     resource_id: str | None
     details: dict
     created_at: datetime
-
