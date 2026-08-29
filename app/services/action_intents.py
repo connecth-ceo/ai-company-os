@@ -1,10 +1,9 @@
-import hashlib
-import json
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.integrity import canonical_json_bytes, json_sha256
 from app.models import ActionIntent, ActionIntentStatus, Approval, ApprovalStatus
 from app.schemas import ActionIntentCreate
 from app.services.audit import add_audit_event
@@ -18,17 +17,11 @@ class ActionIntentRejected(ValueError):
 
 
 def canonical_payload(payload: dict) -> bytes:
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
+    return canonical_json_bytes(payload)
 
 
 def payload_digest(payload: dict) -> str:
-    return hashlib.sha256(canonical_payload(payload)).hexdigest()
+    return json_sha256(payload)
 
 
 def verify_payload_integrity(intent: ActionIntent) -> None:

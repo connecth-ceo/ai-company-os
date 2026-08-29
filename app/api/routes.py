@@ -256,9 +256,7 @@ def execution_attempt_rejection(
     error: execution_attempts.ExecutionAttemptRejected,
 ) -> HTTPException:
     status_code = (
-        404
-        if error.code in {"intent_not_found", "attempt_not_found", "receipt_not_found"}
-        else 409
+        404 if error.code in {"intent_not_found", "attempt_not_found", "receipt_not_found"} else 409
     )
     return HTTPException(
         status_code=status_code,

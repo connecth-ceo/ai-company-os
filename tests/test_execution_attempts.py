@@ -394,9 +394,7 @@ def test_execution_attempt_completion_is_terminal_and_idempotent(client):
     assert succeeded["details"]["external_call_performed_by_this_service"] is False
     assert succeeded["details"]["provider_proof_present"] is True
 
-    receipt_response = client.get(
-        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
-    )
+    receipt_response = client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt")
     assert receipt_response.status_code == 200
     receipt = receipt_response.json()
     assert receipt["execution_attempt_id"] == attempt["id"]
@@ -431,9 +429,7 @@ def test_success_completion_requires_hash_only_provider_proof(client):
 
     assert missing.status_code == 422
     assert partial.status_code == 422
-    assert client.get(
-        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
-    ).status_code == 404
+    assert client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").status_code == 404
 
 
 def test_execution_receipt_rejects_conflicting_proof_and_is_tenant_isolated(client):
@@ -446,10 +442,13 @@ def test_execution_receipt_rejects_conflicting_proof_and_is_tenant_isolated(clie
         "provider_reference_hash": PROVIDER_REFERENCE_HASH,
         "response_hash": PROVIDER_RESPONSE_HASH,
     }
-    assert client.post(
-        f"/api/v1/execution-attempts/{attempt['id']}/complete",
-        json=payload,
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/v1/execution-attempts/{attempt['id']}/complete",
+            json=payload,
+        ).status_code
+        == 200
+    )
 
     conflict = client.post(
         f"/api/v1/execution-attempts/{attempt['id']}/complete",
@@ -479,9 +478,7 @@ def test_failed_completion_creates_receipt_without_provider_proof(client):
     )
 
     assert completed.status_code == 200
-    receipt = client.get(
-        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
-    ).json()
+    receipt = client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").json()
     assert receipt["outcome"] == "failed"
     assert receipt["provider_reference_hash"] is None
     assert receipt["response_hash"] is None
@@ -566,9 +563,7 @@ def test_execution_attempt_recovery_quarantines_without_retry(client):
     stored = client.get("/api/v1/execution-attempts").json()[0]
     assert stored["status"] == "uncertain"
     assert stored["outcome_code"] == "deadline_exceeded_without_confirmation"
-    receipt = client.get(
-        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
-    ).json()
+    receipt = client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").json()
     assert receipt["outcome"] == "uncertain"
     assert receipt["outcome_code"] == "deadline_exceeded_without_confirmation"
     events = client.get("/api/v1/audit-events").json()

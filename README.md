@@ -124,6 +124,9 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 
 외부 실행 결과의 원문 없는 불변 증빙 규칙은
 [docs/EXECUTION_RECEIPT_KO.md](docs/EXECUTION_RECEIPT_KO.md)에 기록되어 있습니다.
+
+공급자별 SDK를 핵심 원장에서 분리하는 실행 포트는
+[docs/CONNECTOR_RUNTIME_PORT_KO.md](docs/CONNECTOR_RUNTIME_PORT_KO.md)에 기록되어 있습니다.
 외부 API connector의 action allowlist, 버전별 payload JSON Schema와 실행 가능 상태 계약은
 [docs/CONNECTOR_REGISTRY_KO.md](docs/CONNECTOR_REGISTRY_KO.md)에 기록되어 있습니다.
 AI 직원 역할·버전·도구·승인 정책 조회 기준은

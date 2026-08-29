@@ -532,9 +532,7 @@ async def complete_execution_attempt(
     if attempt.status in terminal_statuses:
         if attempt.status == outcome and attempt.outcome_code == payload.outcome_code:
             receipt = await session.scalar(
-                select(ExecutionReceipt).where(
-                    ExecutionReceipt.execution_attempt_id == attempt.id
-                )
+                select(ExecutionReceipt).where(ExecutionReceipt.execution_attempt_id == attempt.id)
             )
             if receipt is None:
                 _record_receipt(
