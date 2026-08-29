@@ -43,4 +43,3 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert ".portfolio-actions" in stylesheet.text
     assert ".portfolio-health" in stylesheet.text
     assert ".portfolio-progress" in stylesheet.text
-
