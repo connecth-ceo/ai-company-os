@@ -10,6 +10,7 @@ const state = {
   briefingSchedule: { enabled: false, last_delivery: null },
   knowledge: [],
   provenance: [],
+  provenanceQuality: { summary: { quality_counts: {} }, items: [] },
   goals: [],
   projects: [],
   portfolioHealth: { summary: { health_counts: {} }, goals: [], projects: [] },
@@ -136,6 +137,15 @@ const contextResourceLabels = {
 const provenanceSubjectLabels = { knowledge: "연구 지식", decision: "대표 결정" };
 const provenanceStatusLabels = {
   unverified: "미검증", observed: "출처 관찰", verified: "검증 완료", rejected: "근거 제외",
+};
+
+const provenanceQualityLabels = {
+  rejected: "반려 근거",
+  unverified_decision: "대표 결정 미검증",
+  unverified_knowledge: "지식 근거 미검증",
+  observed_decision: "결정 근거 검토 필요",
+  observed_knowledge: "관찰 출처 검토 필요",
+  verified: "검증 완료",
 };
 
 function projectTitle(projectId) {
@@ -449,6 +459,25 @@ function renderProvenance() {
   }).join("");
 }
 
+function renderProvenanceQuality() {
+  const summary = state.provenanceQuality.summary || {};
+  const items = state.provenanceQuality.items || [];
+  $("#provenance-quality-coverage").textContent = `${summary.verification_coverage_percent || 0}%`;
+  $("#provenance-quality-pending").textContent = summary.needs_review_records || 0;
+  $("#provenance-quality-rejected").textContent = summary.rejected_records || 0;
+  if (!items.length) {
+    $("#provenance-quality-list").innerHTML = '<p class="empty">검토가 필요한 근거가 없습니다.</p>';
+    return;
+  }
+  $("#provenance-quality-list").innerHTML = items.slice(0, 8).map((item) => `
+    <article class="provenance-quality-item level-${escapeHtml(item.quality_level)}">
+      <span class="provenance-quality-level">${escapeHtml(item.quality_level === "critical" ? "긴급" : item.quality_level === "action" ? "행동" : "관찰")}</span>
+      <strong>${escapeHtml(item.source_label)}</strong>
+      <small>${escapeHtml(provenanceQualityLabels[item.quality_reason] || item.quality_reason)}</small>
+    </article>
+  `).join("");
+}
+
 function renderContextSearch() {
   const results = $("#context-search-results");
   if (!state.contextSearch.query) {
@@ -472,13 +501,14 @@ function renderContextSearch() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, provenance, goals, projects, portfolioHealth, agents] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, provenance, provenanceQuality, goals, projects, portfolioHealth, agents] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
       api("/api/v1/briefing-schedule"),
       api("/api/v1/knowledge"),
       api("/api/v1/provenance?limit=20"),
+      api("/api/v1/provenance/quality?limit=8"),
       api("/api/v1/goals"),
       api("/api/v1/projects"),
       api("/api/v1/portfolio/health"),
@@ -493,11 +523,12 @@ async function loadDashboard() {
     state.briefingSchedule = briefingSchedule;
     state.knowledge = knowledge;
     state.provenance = provenance;
+    state.provenanceQuality = provenanceQuality;
     state.goals = goals;
     state.projects = projects;
     state.portfolioHealth = portfolioHealth;
     state.agents = agents;
-    renderPortfolioHealth(); renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderProvenance(); renderAgents();
+    renderPortfolioHealth(); renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderProvenanceQuality(); renderProvenance(); renderAgents();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
