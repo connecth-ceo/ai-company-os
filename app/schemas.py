@@ -323,6 +323,48 @@ class AttentionFollowUpRead(BaseModel):
     created_at: datetime
 
 
+class AttentionAutomationPolicyRead(BaseModel):
+    rule_version: str
+    enabled: bool
+    interval_seconds: int
+    run_limit: int
+    automatic_kinds: list[AttentionKind]
+    automatic_levels: list[AttentionLevel]
+    manual_kinds: list[AttentionKind]
+    manual_levels: list[AttentionLevel]
+    creates_task_execution: bool
+    creates_external_action: bool
+
+
+class AttentionAutomationRunRequest(BaseModel):
+    dry_run: bool = True
+    limit: int | None = Field(default=None, ge=1, le=200)
+
+
+class AttentionAutomationItemRead(BaseModel):
+    attention_id: str
+    fingerprint: str
+    kind: AttentionKind
+    level: AttentionLevel
+    decision: str
+    reason: str
+    follow_up_id: str | None = None
+    task_id: str | None = None
+    commitment_id: str | None = None
+
+
+class AttentionAutomationRunRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    enabled: bool
+    dry_run: bool
+    scanned: int
+    eligible: int
+    created: int
+    skipped: int
+    items: list[AttentionAutomationItemRead]
+
+
 class BriefingDeliveryRead(ORMModel):
     id: str
     tenant_id: str

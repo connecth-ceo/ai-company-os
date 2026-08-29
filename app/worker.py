@@ -3,6 +3,7 @@ import asyncio
 from celery import Celery
 
 from app.core.config import get_settings
+from app.services.attention_automation import dispatch_scheduled_attention_auto_plan
 from app.services.briefing_delivery import dispatch_scheduled_briefing
 from app.services.delegation_execution import (
     DelegationExecutionError,
@@ -31,7 +32,11 @@ celery_app.conf.update(
         "daily-briefing-delivery-tick": {
             "task": "ai_company.dispatch_daily_briefing",
             "schedule": 300.0,
-        }
+        },
+        "attention-auto-plan-tick": {
+            "task": "ai_company.dispatch_attention_auto_plan",
+            "schedule": float(settings.attention_auto_plan_interval_seconds),
+        },
     },
 )
 
@@ -67,4 +72,17 @@ def dispatch_daily_briefing_job() -> dict[str, str | int | None]:
         "outcome": result.outcome.value,
         "delivery_id": result.delivery_id,
         "attempt_count": result.attempt_count,
+    }
+
+
+@celery_app.task(name="ai_company.dispatch_attention_auto_plan", max_retries=0)
+def dispatch_attention_auto_plan_job() -> dict[str, str | int | bool]:
+    result = asyncio.run(dispatch_scheduled_attention_auto_plan(settings=settings))
+    return {
+        "rule_version": result.rule_version,
+        "enabled": result.enabled,
+        "scanned": result.scanned,
+        "eligible": result.eligible,
+        "created": result.created,
+        "skipped": result.skipped,
     }

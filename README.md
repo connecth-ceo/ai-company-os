@@ -34,6 +34,7 @@
 - 반려·미검증·관찰 근거를 비용 없이 우선순위화하는 근거 품질 큐와 검증률 요약
 - 담당자·마감일·출처·관련 결정이 있는 약속/후속조치와 기한 초과 추적
 - 지연 약속·장기 실행·업무 실패·승인 적체와 결정 신뢰도·후속 실행 위험을 통합 정렬하고 확인·후속 Task·마감 약속까지 잇는 대표 주의 폐루프
+- 저위험 내부 주의신호만 queued Task·기한 약속으로 자동계획하는 기본 비활성·dry-run 우선 정책
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
 - 민감 역할·고비용 AI 위임을 대표 승인 전 실행하지 않는 승인 게이트
 - Worker 정체 위임의 dry-run 진단, 안전 복구, 비용 중복 방지 격리
@@ -144,6 +145,8 @@ AI 직원 역할·버전·도구·승인 정책 조회 기준은
 [docs/ATTENTION_ACKNOWLEDGEMENT_COMPLETION_REPORT_KO.md](docs/ATTENTION_ACKNOWLEDGEMENT_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 주의 신호를 실행 전 Task와 담당자·기한 Commitment로 전환하고 상태를 추적하는 기준은
 [docs/ATTENTION_FOLLOW_UP_LOOP_COMPLETION_REPORT_KO.md](docs/ATTENTION_FOLLOW_UP_LOOP_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
+저위험 내부 신호 자동계획의 허용·차단 범위와 기본 비활성 스케줄은
+[docs/ATTENTION_AUTOMATION_POLICY_KO.md](docs/ATTENTION_AUTOMATION_POLICY_KO.md)에 기록되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

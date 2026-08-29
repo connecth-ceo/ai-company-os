@@ -50,6 +50,12 @@ services:
         value: "72"
       - key: ATTENTION_APPROVAL_CRITICAL_HOURS
         value: "72"
+      - key: ATTENTION_AUTO_PLAN_ENABLED
+        value: "false"
+      - key: ATTENTION_AUTO_PLAN_INTERVAL_SECONDS
+        value: "300"
+      - key: ATTENTION_AUTO_PLAN_LIMIT
+        value: "20"
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -169,6 +175,21 @@ services:
           type: web
           name: ai-company-os
           envVarKey: ATTENTION_APPROVAL_CRITICAL_HOURS
+      - key: ATTENTION_AUTO_PLAN_ENABLED
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_AUTO_PLAN_ENABLED
+      - key: ATTENTION_AUTO_PLAN_INTERVAL_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_AUTO_PLAN_INTERVAL_SECONDS
+      - key: ATTENTION_AUTO_PLAN_LIMIT
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: ATTENTION_AUTO_PLAN_LIMIT
       - key: OPENAI_API_KEY
         fromService:
           type: web

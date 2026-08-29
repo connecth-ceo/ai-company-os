@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     attention_commitment_decision_hours: int = Field(default=24, ge=1, le=720)
     attention_commitment_critical_hours: int = Field(default=72, ge=2, le=2_160)
     attention_approval_critical_hours: int = Field(default=72, ge=1, le=2_160)
+    attention_auto_plan_enabled: bool = False
+    attention_auto_plan_interval_seconds: int = Field(default=300, ge=60, le=86_400)
+    attention_auto_plan_limit: int = Field(default=20, ge=1, le=200)
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"

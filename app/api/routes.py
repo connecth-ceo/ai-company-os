@@ -50,6 +50,9 @@ from app.schemas import (
     ApprovalRead,
     AttentionAcknowledgementCreate,
     AttentionAcknowledgementRead,
+    AttentionAutomationPolicyRead,
+    AttentionAutomationRunRead,
+    AttentionAutomationRunRequest,
     AttentionFollowUpCreate,
     AttentionFollowUpRead,
     AttentionQueueRead,
@@ -99,6 +102,7 @@ from app.services import (
     agent_directory,
     attention,
     attention_acknowledgements,
+    attention_automation,
     attention_follow_ups,
     commitments,
     company_search,
@@ -269,6 +273,47 @@ async def get_attention_queue(
         include_acknowledged=include_acknowledged,
         limit=limit,
     )
+
+
+@router.get(
+    "/attention/automation-policy",
+    response_model=AttentionAutomationPolicyRead,
+)
+async def get_attention_automation_policy(
+    settings: Settings = Depends(get_settings),
+    _: TenantContext = Depends(get_tenant_context),
+) -> AttentionAutomationPolicyRead:
+    return attention_automation.attention_automation_policy(settings)
+
+
+@router.post(
+    "/attention/automation/run",
+    response_model=AttentionAutomationRunRead,
+)
+async def run_attention_automation(
+    payload: AttentionAutomationRunRequest,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> AttentionAutomationRunRead:
+    try:
+        result = await attention_automation.run_attention_automation(
+            session,
+            tenant_id=context.tenant_id,
+            settings=settings,
+            dry_run=payload.dry_run,
+            limit=payload.limit,
+            actor=context.actor,
+        )
+    except attention_automation.AttentionAutomationRejected as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": exc.detail},
+        ) from exc
+    if not payload.dry_run:
+        await session.commit()
+    return result
 
 
 def attention_acknowledgement_rejection(

@@ -24,6 +24,14 @@ def test_daily_briefing_tick_is_registered_without_ai_work():
     assert "ai_company.dispatch_daily_briefing" in celery_app.tasks
 
 
+def test_attention_auto_plan_tick_is_registered_fail_closed():
+    schedule = celery_app.conf.beat_schedule["attention-auto-plan-tick"]
+
+    assert schedule["task"] == "ai_company.dispatch_attention_auto_plan"
+    assert schedule["schedule"] == 300.0
+    assert "ai_company.dispatch_attention_auto_plan" in celery_app.tasks
+
+
 async def test_redelivered_worker_task_recovers_interrupted_run():
     async with SessionLocal() as session:
         task = Task(
