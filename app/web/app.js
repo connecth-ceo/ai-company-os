@@ -716,4 +716,3 @@ $("#api-key").value = state.apiKey;
 $("#tenant-id").value = state.tenantId;
 loadDashboard();
 setInterval(loadDashboard, 8000);
-
