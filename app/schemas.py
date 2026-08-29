@@ -1027,6 +1027,22 @@ class ExecutionAttemptRead(ORMModel):
     updated_at: datetime
 
 
+class ExecutionAttemptPreflightRead(BaseModel):
+    generated_at: datetime
+    attempt_id: str
+    connector_key: str
+    action_type: str
+    schema_id: str | None
+    schema_version: str | None
+    status: ExecutionAttemptStatus
+    payload_hash: str
+    payload_valid: bool
+    approval_valid: bool
+    external_execution_available: bool
+    executable: bool
+    blockers: list[str]
+
+
 class ExecutionAttemptComplete(BaseModel):
     expected_payload_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     outcome: Literal["succeeded", "failed", "uncertain"]

@@ -37,6 +37,11 @@
 만들기 전에 읽을 수 있는 JSON Schema를 반환한다. schema ID와 version이 함께 반환되며 connector에
 허용되지 않은 action의 schema 조회는 차단된다.
 
+`GET /api/v1/execution-attempts/{attempt_id}/preflight`는 준비된 원장을 소비하지 않고 실행 가능 조건을
+진단한다. 승인·만료·payload hash·payload 계약·connector 정책·adapter 가용성을 다시 확인하지만
+ActionIntent를 consumed로 바꾸거나 감사 이벤트를 추가하거나 공급자를 호출하지 않는다. 응답에는
+payload 본문과 자격증명을 포함하지 않고 blocker code만 반환한다.
+
 ## SmartStore 확장 기준
 
 상품 이미지 입력부터 썸네일·상세페이지·법률검토·가격·게시·마케팅·리뷰·정산으로 확장할 때 각각을

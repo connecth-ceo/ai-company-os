@@ -5,7 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.catalog import ConnectorPolicyError, require_connector_action
-from app.connectors.contracts import ConnectorPayloadError, validate_connector_payload
+from app.connectors.contracts import (
+    ConnectorPayloadError,
+    require_payload_contract,
+    validate_connector_payload,
+)
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import (
@@ -19,6 +23,7 @@ from app.models import (
 from app.schemas import (
     ExecutionAttemptClaim,
     ExecutionAttemptComplete,
+    ExecutionAttemptPreflightRead,
     ExecutionAttemptPrepare,
     ExecutionAttemptRecoveryRead,
 )
@@ -54,6 +59,118 @@ def _require_connector_payload(action_type: str, payload: dict) -> None:
 
 def _as_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+async def preflight_execution_attempt(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    attempt_id: str,
+    now: datetime | None = None,
+) -> ExecutionAttemptPreflightRead:
+    """Diagnose execution blockers without claiming, mutating, or calling a provider."""
+
+    current = now or datetime.now(UTC)
+    attempt = await session.scalar(
+        select(ExecutionAttempt).where(
+            ExecutionAttempt.id == attempt_id,
+            ExecutionAttempt.tenant_id == tenant_id,
+        )
+    )
+    if attempt is None:
+        raise ExecutionAttemptRejected("attempt_not_found", "Execution attempt not found")
+
+    blockers: list[str] = []
+    descriptor = None
+    try:
+        descriptor = require_connector_action(
+            attempt.connector_key,
+            attempt.action_type,
+            phase="claim",
+        )
+    except ConnectorPolicyError as exc:
+        blockers.append(exc.code)
+
+    contract = None
+    try:
+        contract = require_payload_contract(attempt.action_type)
+    except ConnectorPayloadError as exc:
+        blockers.append(exc.code)
+
+    intent = await session.scalar(
+        select(ActionIntent).where(
+            ActionIntent.id == attempt.action_intent_id,
+            ActionIntent.tenant_id == tenant_id,
+        )
+    )
+    payload_valid = True
+    approval_valid = True
+    if attempt.status != ExecutionAttemptStatus.PREPARED:
+        blockers.append("attempt_not_prepared")
+    if intent is None:
+        blockers.append("intent_not_found")
+        payload_valid = False
+        approval_valid = False
+    else:
+        try:
+            verify_payload_integrity(intent)
+        except ValueError:
+            blockers.append("payload_integrity_failed")
+            payload_valid = False
+        if intent.payload_hash != attempt.payload_hash:
+            blockers.append("payload_hash_mismatch")
+            payload_valid = False
+        if intent.action_type != attempt.action_type:
+            blockers.append("action_type_mismatch")
+            payload_valid = False
+        try:
+            validate_connector_payload(intent.action_type, intent.payload)
+        except ConnectorPayloadError as exc:
+            blockers.append(exc.code)
+            payload_valid = False
+        if intent.status != ActionIntentStatus.APPROVED:
+            blockers.append("intent_not_approved")
+            approval_valid = False
+        if current >= _as_utc(intent.expires_at):
+            blockers.append("intent_expired")
+            approval_valid = False
+
+        approval = await session.scalar(
+            select(Approval).where(
+                Approval.id == attempt.approval_id,
+                Approval.tenant_id == tenant_id,
+            )
+        )
+        if (
+            approval is None
+            or approval.id != intent.approval_id
+            or approval.status != ApprovalStatus.APPROVED
+        ):
+            blockers.append("approval_not_approved")
+            approval_valid = False
+
+    external_execution_available = bool(
+        descriptor is not None and descriptor.external_execution_available
+    )
+    if not external_execution_available:
+        blockers.append("external_adapter_unavailable")
+
+    unique_blockers = list(dict.fromkeys(blockers))
+    return ExecutionAttemptPreflightRead(
+        generated_at=current,
+        attempt_id=attempt.id,
+        connector_key=attempt.connector_key,
+        action_type=attempt.action_type,
+        schema_id=contract.schema_id if contract else None,
+        schema_version=contract.version if contract else None,
+        status=attempt.status,
+        payload_hash=attempt.payload_hash,
+        payload_valid=payload_valid,
+        approval_valid=approval_valid,
+        external_execution_available=external_execution_available,
+        executable=not unique_blockers,
+        blockers=unique_blockers,
+    )
 
 
 async def _load_intent(

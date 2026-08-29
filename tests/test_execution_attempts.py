@@ -185,6 +185,88 @@ def test_execution_attempt_prepare_is_immutable_idempotent_and_side_effect_free(
     assert prepared["details"]["external_call_started"] is False
 
 
+def test_execution_preflight_is_read_only_and_reports_adapter_blocker(client):
+    intent = client.post(
+        "/api/v1/action-intents",
+        json=action_payload(key="execution-preflight-intent-001"),
+    ).json()
+    approve(client, intent)
+    attempt = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json=preparation_payload(intent, key="execution-preflight-attempt-001"),
+    ).json()
+    events_before = client.get("/api/v1/audit-events").json()
+
+    response = client.get(f"/api/v1/execution-attempts/{attempt['id']}/preflight")
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["schema_id"] == "external.publish"
+    assert report["schema_version"] == "v1"
+    assert report["status"] == "prepared"
+    assert report["payload_hash"] == intent["payload_hash"]
+    assert report["payload_valid"] is True
+    assert report["approval_valid"] is True
+    assert report["external_execution_available"] is False
+    assert report["executable"] is False
+    assert report["blockers"] == ["external_adapter_unavailable"]
+    assert client.get(f"/api/v1/action-intents/{intent['id']}").json()["status"] == "approved"
+    assert client.get("/api/v1/audit-events").json() == events_before
+
+
+def test_execution_preflight_detects_tampering_without_disclosing_payload(client):
+    intent = client.post(
+        "/api/v1/action-intents",
+        json=action_payload(key="execution-preflight-tamper-intent-001"),
+    ).json()
+    approve(client, intent)
+    attempt = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json=preparation_payload(intent, key="execution-preflight-tamper-attempt-001"),
+    ).json()
+
+    async def tamper() -> None:
+        async with SessionLocal() as session:
+            stored = await session.get(ActionIntent, intent["id"])
+            assert stored is not None
+            stored.payload = {
+                "channel": "company_blog",
+                "draft_id": "draft-ledger-001",
+                "injected_destination": "do-not-disclose",
+            }
+            await session.commit()
+
+    asyncio.run(tamper())
+    response = client.get(f"/api/v1/execution-attempts/{attempt['id']}/preflight")
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["payload_valid"] is False
+    assert "payload_integrity_failed" in report["blockers"]
+    assert "connector_payload_invalid" in report["blockers"]
+    assert "do-not-disclose" not in response.text
+
+
+def test_execution_preflight_is_tenant_isolated(client):
+    intent = client.post(
+        "/api/v1/action-intents",
+        json=action_payload(key="execution-preflight-tenant-intent-001"),
+    ).json()
+    approve(client, intent)
+    attempt = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json=preparation_payload(intent, key="execution-preflight-tenant-attempt-001"),
+    ).json()
+
+    response = client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/preflight",
+        headers={"X-Tenant-ID": "other"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "attempt_not_found"
+
+
 def test_execution_attempt_claim_atomically_consumes_single_use_intent(client):
     intent = client.post("/api/v1/action-intents", json=action_payload()).json()
     approve(client, intent)

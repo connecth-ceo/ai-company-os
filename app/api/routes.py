@@ -86,6 +86,7 @@ from app.schemas import (
     DispatchResponse,
     ExecutionAttemptClaim,
     ExecutionAttemptComplete,
+    ExecutionAttemptPreflightRead,
     ExecutionAttemptPrepare,
     ExecutionAttemptRead,
     ExecutionAttemptRecoveryRead,
@@ -306,6 +307,25 @@ async def list_execution_attempts(
         .limit(limit)
     )
     return list(await session.scalars(query))
+
+
+@router.get(
+    "/execution-attempts/{attempt_id}/preflight",
+    response_model=ExecutionAttemptPreflightRead,
+)
+async def preflight_execution_attempt(
+    attempt_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttemptPreflightRead:
+    try:
+        return await execution_attempts.preflight_execution_attempt(
+            session,
+            tenant_id=context.tenant_id,
+            attempt_id=attempt_id,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        raise execution_attempt_rejection(exc) from exc
 
 
 @router.post(
