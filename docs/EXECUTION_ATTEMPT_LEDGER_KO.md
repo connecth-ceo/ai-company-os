@@ -22,6 +22,7 @@ ActionIntent 하나에는 ExecutionAttempt 하나만 허용한다. 실패했거�
 - `POST /api/v1/action-intents/{id}/execution-attempts`: 준비 원장 생성
 - `GET /api/v1/execution-attempts`: 테넌트별 원장 조회
 - `POST /api/v1/execution-attempts/{id}/claim`: 실행기의 단일사용 권한 원자적 claim
+- `POST /api/v1/execution-attempts/{id}/dispatch`: 설치된 adapter를 트랜잭션 밖에서 호출하고 결과 종결
 - `POST /api/v1/execution-attempts/{id}/complete`: 성공·실패·불확실 결과 종결
 - `GET /api/v1/execution-attempts/{id}/receipt`: 원문 없는 불변 실행 증빙 조회
 - `POST /api/v1/execution-attempts/recovery/run`: timeout claim dry-run 진단 또는 격리
@@ -35,6 +36,7 @@ ActionIntent 하나에는 ExecutionAttempt 하나만 허용한다. 실패했거�
 - audit event의 `external_call_started`는 현재 항상 `false`다.
 - payload와 비밀값을 ExecutionAttempt에 복제하지 않고 ActionIntent payload hash만 보관한다.
 - 실제 connector는 아직 catalog에 없고 완료 API도 connector를 호출하지 않는다.
+- dispatch endpoint도 운영 adapter registry가 비어 있는 동안에는 원장을 변경하지 않고 fail-closed 한다.
 - 성공 완료에는 공급자 참조값과 응답 원문의 SHA-256 해시가 모두 필요하다. 원문, 토큰,
   자격증명은 영수증에 저장하지 않는다.
 - 모든 신규 종결은 시도당 하나뿐인 `ExecutionReceipt`와 같은 트랜잭션에 기록된다. 같은

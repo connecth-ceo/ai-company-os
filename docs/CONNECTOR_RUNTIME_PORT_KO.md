@@ -29,3 +29,16 @@ payload bytes는 객체 repr에서 숨겨 우발적인 로그 복제를 줄인�
 `ConnectorAdapterRegistry`는 connector key 중복과 action 범위를 검사하고, 미등록 adapter는 항상
 fail-closed 한다. 현재 운영 registry는 비어 있으므로 외부 API를 호출하지 않는다. 공급자를 선정하면
 해당 adapter만 이 포트를 구현하고 catalog 가용성을 켜는 방식으로 추가한다.
+
+## Dispatch 조정기
+
+`POST /api/v1/execution-attempts/{attempt_id}/dispatch`는 이미 claim된 실행만 받으며 아래 세 구간을
+분리한다.
+
+1. 읽기 세션에서 consumed intent, deadline, payload hash와 versioned contract를 재검사한다.
+2. DB 트랜잭션을 닫은 뒤 adapter를 호출한다.
+3. 검증된 결과만 새 쓰기 세션에서 ExecutionAttempt와 ExecutionReceipt로 함께 종결한다.
+
+adapter timeout이나 예외는 공급자 성공·실패를 추측하지 않는다. claim 상태를 유지해 기존 timeout
+recovery가 `uncertain`으로 격리하도록 하며 자동 재시도하지 않는다. 완료된 dispatch를 다시 요청하면
+adapter를 재호출하지 않고 기존 영수증을 반환한다.

@@ -227,3 +227,9 @@ class ConnectorAdapterRegistry:
 
 
 EMPTY_CONNECTOR_ADAPTER_REGISTRY = ConnectorAdapterRegistry()
+
+
+def get_connector_adapter_registry() -> ConnectorAdapterRegistry:
+    """FastAPI dependency seam; production remains fail-closed until an adapter is installed."""
+
+    return EMPTY_CONNECTOR_ADAPTER_REGISTRY

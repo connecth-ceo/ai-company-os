@@ -12,6 +12,10 @@ from app.connectors.catalog import (
     require_connector_action,
 )
 from app.connectors.contracts import payload_contracts_for, public_payload_schema
+from app.connectors.runtime import (
+    ConnectorAdapterRegistry,
+    get_connector_adapter_registry,
+)
 from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
@@ -87,6 +91,7 @@ from app.schemas import (
     DispatchResponse,
     ExecutionAttemptClaim,
     ExecutionAttemptComplete,
+    ExecutionAttemptDispatch,
     ExecutionAttemptPreflightRead,
     ExecutionAttemptPrepare,
     ExecutionAttemptRead,
@@ -124,6 +129,7 @@ from app.services import (
     attention_follow_ups,
     commitments,
     company_search,
+    connector_dispatch,
     decision_follow_through,
     decision_memory,
     decision_readiness,
@@ -378,6 +384,28 @@ async def claim_execution_attempt(
     await session.commit()
     await session.refresh(attempt)
     return attempt
+
+
+@router.post(
+    "/execution-attempts/{attempt_id}/dispatch",
+    response_model=ExecutionAttemptRead,
+)
+async def dispatch_execution_attempt(
+    attempt_id: str,
+    payload: ExecutionAttemptDispatch,
+    registry: ConnectorAdapterRegistry = Depends(get_connector_adapter_registry),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttempt:
+    try:
+        return await connector_dispatch.dispatch_claimed_execution_attempt(
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            attempt_id=attempt_id,
+            expected_payload_hash=payload.expected_payload_hash,
+            registry=registry,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        raise execution_attempt_rejection(exc) from exc
 
 
 @router.post(

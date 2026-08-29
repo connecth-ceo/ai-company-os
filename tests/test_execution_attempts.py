@@ -1,6 +1,13 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from app.connectors.runtime import (
+    ConnectorAdapterRegistry,
+    ConnectorInvocation,
+    ConnectorOutcome,
+    ConnectorResult,
+    get_connector_adapter_registry,
+)
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.main import app
@@ -482,6 +489,98 @@ def test_failed_completion_creates_receipt_without_provider_proof(client):
     assert receipt["outcome"] == "failed"
     assert receipt["provider_reference_hash"] is None
     assert receipt["response_hash"] is None
+
+
+def test_dispatch_fails_closed_without_installed_adapter_and_keeps_claim(client):
+    intent, attempt = create_claimed_attempt(client)
+
+    response = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/dispatch",
+        json={"expected_payload_hash": intent["payload_hash"]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "connector_adapter_unavailable"
+    current = client.get("/api/v1/execution-attempts").json()[0]
+    assert current["status"] == "claimed"
+    assert client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").status_code == 404
+
+
+def test_dispatch_runs_adapter_outside_ledger_transaction_and_records_receipt(client):
+    intent, attempt = create_claimed_attempt(client)
+    calls: list[str] = []
+
+    class FakeAdapter:
+        connector_key = "external_publish_gateway"
+        adapter_version = "test-v1"
+        action_types = ("external_publish",)
+
+        async def execute(self, invocation: ConnectorInvocation) -> ConnectorResult:
+            calls.append(invocation.attempt_id)
+            assert b'"draft_id":"draft-ledger-001"' in invocation.payload_json
+            return ConnectorResult(
+                attempt_id=invocation.attempt_id,
+                outcome=ConnectorOutcome.SUCCEEDED,
+                outcome_code="fake_provider_confirmed",
+                observed_at=datetime.now(UTC),
+                provider_reference_hash=PROVIDER_REFERENCE_HASH,
+                response_hash=PROVIDER_RESPONSE_HASH,
+            )
+
+    registry = ConnectorAdapterRegistry((FakeAdapter(),))
+    app.dependency_overrides[get_connector_adapter_registry] = lambda: registry
+    try:
+        response = client.post(
+            f"/api/v1/execution-attempts/{attempt['id']}/dispatch",
+            json={"expected_payload_hash": intent["payload_hash"]},
+        )
+    finally:
+        app.dependency_overrides.pop(get_connector_adapter_registry, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "succeeded"
+    assert calls == [attempt["id"]]
+    receipt = client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").json()
+    assert receipt["completed_by"] == "adapter:external_publish_gateway@test-v1"
+    assert receipt["provider_reference_hash"] == PROVIDER_REFERENCE_HASH
+    assert receipt["response_hash"] == PROVIDER_RESPONSE_HASH
+
+    repeated = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/dispatch",
+        json={"expected_payload_hash": intent["payload_hash"]},
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["status"] == "succeeded"
+    assert calls == [attempt["id"]]
+
+
+def test_dispatch_adapter_failure_stays_claimed_for_uncertain_recovery(client):
+    intent, attempt = create_claimed_attempt(client)
+
+    class FailingAdapter:
+        connector_key = "external_publish_gateway"
+        adapter_version = "test-v1"
+        action_types = ("external_publish",)
+
+        async def execute(self, invocation: ConnectorInvocation) -> ConnectorResult:
+            raise TimeoutError("provider timeout with no verified outcome")
+
+    registry = ConnectorAdapterRegistry((FailingAdapter(),))
+    app.dependency_overrides[get_connector_adapter_registry] = lambda: registry
+    try:
+        response = client.post(
+            f"/api/v1/execution-attempts/{attempt['id']}/dispatch",
+            json={"expected_payload_hash": intent["payload_hash"]},
+        )
+    finally:
+        app.dependency_overrides.pop(get_connector_adapter_registry, None)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "connector_adapter_failed"
+    assert "provider timeout" not in response.text
+    current = client.get("/api/v1/execution-attempts").json()[0]
+    assert current["status"] == "claimed"
+    assert client.get(f"/api/v1/execution-attempts/{attempt['id']}/receipt").status_code == 404
 
 
 def test_execution_attempt_cannot_complete_before_claim(client):
