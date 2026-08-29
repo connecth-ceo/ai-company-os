@@ -238,4 +238,3 @@ async def build_portfolio_health(
         goals=goal_items[:item_limit],
         projects=project_items[:item_limit],
     )
-
