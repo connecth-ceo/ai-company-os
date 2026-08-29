@@ -39,4 +39,3 @@
 - Render Web·Worker 동일 커밋 Live
 - 운영 `/api/v1/portfolio/health`의 규칙 버전과 전체 요약 확인
 - 운영 CEO Desk 건강도 요약·배지·진척 막대 표시 확인
-
