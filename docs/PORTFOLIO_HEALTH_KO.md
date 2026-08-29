@@ -50,4 +50,3 @@ Goal → Project → Task 계층의 현재 데이터를 읽어 대표가 목표�
 - DB 행을 추가·수정·삭제하지 않고 AuditEvent도 만들지 않는다.
 - 모든 조회는 `X-Tenant-ID`의 회사 범위 안에서만 수행한다.
 - 별도 DB 열이나 테이블을 추가하지 않으므로 Alembic revision은 바뀌지 않는다.
-
