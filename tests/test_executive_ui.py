@@ -36,6 +36,8 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert "renderPortfolioHealth()" in script.text
     assert "renderAgents()" in script.text
     assert "renderProvenance()" in script.text
+    assert "data-provenance-review" in script.text
+    assert "/reviews`" in script.text
     assert "/transition`" in script.text
     assert "data-goal-id" in script.text
     assert "data-project-id" in script.text
@@ -47,3 +49,4 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert ".portfolio-health" in stylesheet.text
     assert ".portfolio-progress" in stylesheet.text
     assert ".provenance-list" in stylesheet.text
+    assert ".provenance-actions" in stylesheet.text
