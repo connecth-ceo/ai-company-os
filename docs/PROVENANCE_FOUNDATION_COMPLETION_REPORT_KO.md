@@ -33,4 +33,5 @@
 - Python compile, dependency, JavaScript, PowerShell 구문검사
 - Render Web·Worker 동일 커밋 배포와 운영 읽기 API 확인
 
-마지막 두 운영 항목은 배포 후 결과로 갱신한다.
+GitHub `main` 커밋 `742f6cc`와 Render Web·Worker에 배포했고, 운영 `/ready`의 schema
+`b4d6f8a0c2e4`, OpenAPI의 목록·상세 경로, 미인증 401 차단을 확인했다.

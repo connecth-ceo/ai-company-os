@@ -30,6 +30,7 @@ from app.models import (
     Memory,
     Project,
     ProvenanceRecord,
+    ProvenanceReview,
     ProvenanceSubjectType,
     ProvenanceVerificationStatus,
     Task,
@@ -76,6 +77,8 @@ from app.schemas import (
     ProjectRead,
     ProjectTransition,
     ProvenanceRead,
+    ProvenanceReviewCreate,
+    ProvenanceReviewRead,
     TaskCreate,
     TaskDetail,
     TaskRead,
@@ -92,6 +95,7 @@ from app.services import (
     decision_memory,
     portfolio,
     portfolio_health,
+    provenance_reviews,
 )
 from app.services.ai_costs import (
     get_current_month_cost_summary,
@@ -1255,6 +1259,71 @@ async def get_provenance(
     if item is None:
         raise HTTPException(status_code=404, detail="Provenance record not found")
     return item
+
+
+def provenance_review_rejection(
+    error: provenance_reviews.ProvenanceReviewRejected,
+) -> HTTPException:
+    status_code = 404 if error.code == "provenance_not_found" else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
+@router.get(
+    "/provenance/{record_id}/reviews",
+    response_model=list[ProvenanceReviewRead],
+)
+async def list_provenance_reviews(
+    record_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[ProvenanceReview]:
+    try:
+        await provenance_reviews.require_provenance_record(
+            session,
+            tenant_id=context.tenant_id,
+            record_id=record_id,
+        )
+    except provenance_reviews.ProvenanceReviewRejected as exc:
+        raise provenance_review_rejection(exc) from exc
+    query = (
+        select(ProvenanceReview)
+        .where(
+            ProvenanceReview.tenant_id == context.tenant_id,
+            ProvenanceReview.provenance_record_id == record_id,
+        )
+        .order_by(ProvenanceReview.created_at.desc())
+    )
+    return list(await session.scalars(query))
+
+
+@router.post(
+    "/provenance/{record_id}/reviews",
+    response_model=ProvenanceReviewRead,
+    status_code=201,
+)
+async def review_provenance(
+    record_id: str,
+    payload: ProvenanceReviewCreate,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ProvenanceReview:
+    try:
+        review = await provenance_reviews.create_provenance_review(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            record_id=record_id,
+            payload=payload,
+        )
+    except provenance_reviews.ProvenanceReviewRejected as exc:
+        await session.rollback()
+        raise provenance_review_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(review)
+    return review
 
 
 @router.post("/approvals", response_model=ApprovalRead, status_code=201)

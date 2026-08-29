@@ -427,6 +427,11 @@ function renderProvenance() {
     const source = item.source_uri
       ? `<a href="${escapeHtml(item.source_uri)}" target="_blank" rel="noopener noreferrer">원문 열기</a>`
       : '<span class="provenance-no-link">외부 URL 없음</span>';
+    const reviewActions = `
+      <div class="provenance-actions">
+        ${item.verification_status !== "verified" ? `<button type="button" data-provenance-review="verified" data-record-id="${escapeHtml(item.id)}" data-content-hash="${escapeHtml(item.content_hash)}" data-current-status="${escapeHtml(item.verification_status)}">검증</button>` : ""}
+        ${item.verification_status !== "rejected" ? `<button type="button" class="danger" data-provenance-review="rejected" data-record-id="${escapeHtml(item.id)}" data-content-hash="${escapeHtml(item.content_hash)}" data-current-status="${escapeHtml(item.verification_status)}">반려</button>` : ""}
+      </div>`;
     return `
       <article class="provenance-item">
         <div class="provenance-meta">
@@ -439,6 +444,7 @@ function renderProvenance() {
           <code title="SHA-256 ${escapeHtml(item.content_hash)}">SHA-256 ${escapeHtml(item.content_hash.slice(0, 12))}…</code>
           ${item.produced_by_agent ? `<span>${escapeHtml(item.produced_by_agent)}</span>` : ""}
         </div>
+        ${reviewActions}
       </article>`;
   }).join("");
 }
@@ -531,6 +537,40 @@ $("#approval-list").addEventListener("click", async (event) => {
     approved: button.dataset.approved === "true", decided_by: "CEO", note: "CEO Desk에서 결정",
   }) });
   await loadDashboard();
+});
+
+$("#provenance-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-provenance-review]");
+  if (!button) return;
+  const decision = button.dataset.provenanceReview;
+  const isCorrection = ["verified", "rejected"].includes(button.dataset.currentStatus);
+  const promptText = decision === "rejected" || isCorrection
+    ? "검토 사유를 입력해 주세요."
+    : "검증 메모를 입력해 주세요. 선택 사항입니다.";
+  const note = window.prompt(promptText, "");
+  if (note === null) return;
+  if ((decision === "rejected" || isCorrection) && !note.trim()) {
+    window.alert("반려 또는 기존 판정 변경에는 사유가 필요합니다.");
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api(`/api/v1/provenance/${button.dataset.recordId}/reviews`, {
+      method: "POST",
+      body: JSON.stringify({
+        decision,
+        expected_content_hash: button.dataset.contentHash,
+        reviewed_by: "CEO",
+        note: note.trim() || null,
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("#refresh-button").addEventListener("click", loadDashboard);

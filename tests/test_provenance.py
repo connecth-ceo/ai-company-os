@@ -101,3 +101,143 @@ def test_manual_decision_records_unverified_rationale(client):
     assert len(records) == 1
     assert records[0]["source_type"] == "manual"
     assert records[0]["verification_status"] == "unverified"
+
+
+def test_provenance_review_is_hash_bound_idempotent_and_audited(client):
+    task = create_and_run_task(
+        client,
+        "https://example.com/review-source 를 근거로 검토해줘.",
+    )
+    record = client.get(f"/api/v1/provenance?task_id={task['id']}").json()[0]
+    payload = {
+        "decision": "verified",
+        "expected_content_hash": record["content_hash"],
+        "reviewed_by": "CEO",
+        "note": "원문과 연구 요약을 대조함",
+        "idempotency_key": "provenance-review-001",
+    }
+
+    reviewed = client.post(f"/api/v1/provenance/{record['id']}/reviews", json=payload)
+
+    assert reviewed.status_code == 201
+    review = reviewed.json()
+    assert review["decision"] == "verified"
+    assert review["previous_status"] == "observed"
+    assert review["reviewed_content_hash"] == record["content_hash"]
+    repeated = client.post(f"/api/v1/provenance/{record['id']}/reviews", json=payload)
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == review["id"]
+
+    detail = client.get(f"/api/v1/provenance/{record['id']}")
+    history = client.get(f"/api/v1/provenance/{record['id']}/reviews")
+    events = client.get("/api/v1/audit-events?limit=20").json()
+    assert detail.json()["verification_status"] == "verified"
+    assert [item["id"] for item in history.json()] == [review["id"]]
+    assert any(
+        event["action"] == "provenance.verified"
+        and event["details"]["review_id"] == review["id"]
+        and event["details"]["content_hash"] == record["content_hash"]
+        for event in events
+    )
+
+    conflict_payload = {**payload, "decision": "rejected", "note": "다른 요청"}
+    conflict = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json=conflict_payload,
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "idempotency_conflict"
+
+
+def test_provenance_review_rejects_stale_hash_and_cross_tenant_access(client):
+    task = create_and_run_task(
+        client,
+        "https://example.com/hash-source 를 근거로 검토해줘.",
+    )
+    record = client.get(f"/api/v1/provenance?task_id={task['id']}").json()[0]
+    payload = {
+        "decision": "verified",
+        "expected_content_hash": "0" * 64,
+        "reviewed_by": "CEO",
+        "idempotency_key": "provenance-review-stale",
+    }
+
+    stale = client.post(f"/api/v1/provenance/{record['id']}/reviews", json=payload)
+    hidden_list = client.get(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        headers={"X-Tenant-ID": "other"},
+    )
+    hidden_review = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={**payload, "expected_content_hash": record["content_hash"]},
+        headers={"X-Tenant-ID": "other"},
+    )
+
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "content_hash_mismatch"
+    assert (
+        client.get(f"/api/v1/provenance/{record['id']}").json()["verification_status"] == "observed"
+    )
+    assert hidden_list.status_code == 404
+    assert hidden_review.status_code == 404
+
+
+def test_provenance_review_corrections_preserve_history_and_require_notes(client):
+    created = client.post(
+        "/api/v1/decisions",
+        json={
+            "subject": "검토 정책",
+            "choice": "수동 검토",
+            "rationale": "대표의 운영 판단",
+        },
+    )
+    record = client.get(f"/api/v1/provenance?decision_id={created.json()['id']}").json()[0]
+    verified = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={
+            "decision": "verified",
+            "expected_content_hash": record["content_hash"],
+            "reviewed_by": "CEO",
+            "idempotency_key": "provenance-review-correction-1",
+        },
+    )
+    missing_rejection_note = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={
+            "decision": "rejected",
+            "expected_content_hash": record["content_hash"],
+            "reviewed_by": "CEO",
+            "idempotency_key": "provenance-review-correction-2",
+        },
+    )
+    corrected = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={
+            "decision": "rejected",
+            "expected_content_hash": record["content_hash"],
+            "reviewed_by": "CEO",
+            "note": "추가 확인 결과 내부 판단을 근거에서 제외",
+            "idempotency_key": "provenance-review-correction-3",
+        },
+    )
+    missing_correction_note = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={
+            "decision": "verified",
+            "expected_content_hash": record["content_hash"],
+            "reviewed_by": "CEO",
+            "idempotency_key": "provenance-review-correction-4",
+        },
+    )
+
+    assert verified.status_code == 201
+    assert missing_rejection_note.status_code == 422
+    assert corrected.status_code == 201
+    assert corrected.json()["previous_status"] == "verified"
+    assert missing_correction_note.status_code == 409
+    assert missing_correction_note.json()["detail"]["code"] == "correction_note_required"
+    history = client.get(f"/api/v1/provenance/{record['id']}/reviews").json()
+    assert [item["decision"] for item in history] == ["rejected", "verified"]
+    assert (
+        client.get(f"/api/v1/provenance/{record['id']}").json()["verification_status"] == "rejected"
+    )

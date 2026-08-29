@@ -97,6 +97,11 @@ class ProvenanceVerificationStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class ProvenanceReviewDecision(StrEnum):
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class CommitmentStatus(StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
@@ -590,6 +595,33 @@ class ProvenanceRecord(Base, TimestampMixin):
         DateTime(timezone=True), default=utcnow, index=True
     )
     record_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class ProvenanceReview(Base, TimestampMixin):
+    __tablename__ = "provenance_reviews"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        CheckConstraint(
+            "decision IN ('verified', 'rejected')",
+            name="ck_provenance_review_decision",
+        ),
+        CheckConstraint(
+            "previous_status IN ('unverified', 'observed', 'verified', 'rejected')",
+            name="ck_provenance_review_previous_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    provenance_record_id: Mapped[str] = mapped_column(
+        ForeignKey("provenance_records.id", ondelete="RESTRICT"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    decision: Mapped[ProvenanceReviewDecision] = mapped_column(String(40), index=True)
+    previous_status: Mapped[ProvenanceVerificationStatus] = mapped_column(String(40))
+    reviewed_content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    reviewed_by: Mapped[str] = mapped_column(String(100))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Approval(Base, TimestampMixin):

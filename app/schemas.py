@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agents.definitions import EvaluationStatus
 from app.models import (
@@ -20,6 +20,7 @@ from app.models import (
     DecisionStatus,
     GoalStatus,
     ProjectStatus,
+    ProvenanceReviewDecision,
     ProvenanceSourceType,
     ProvenanceSubjectType,
     ProvenanceVerificationStatus,
@@ -575,6 +576,35 @@ class ProvenanceRead(ORMModel):
     verification_status: ProvenanceVerificationStatus
     captured_at: datetime
     record_metadata: dict[str, Any]
+    created_at: datetime
+
+
+class ProvenanceReviewCreate(BaseModel):
+    decision: ProvenanceReviewDecision
+    expected_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewed_by: str = Field(default="CEO", min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=2_000)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+
+    @model_validator(mode="after")
+    def require_rejection_note(self) -> "ProvenanceReviewCreate":
+        if self.decision == ProvenanceReviewDecision.REJECTED and not (self.note or "").strip():
+            raise ValueError("Rejected provenance reviews require a note")
+        if self.note is not None:
+            self.note = self.note.strip() or None
+        return self
+
+
+class ProvenanceReviewRead(ORMModel):
+    id: str
+    tenant_id: str
+    provenance_record_id: str
+    idempotency_key: str
+    decision: ProvenanceReviewDecision
+    previous_status: ProvenanceVerificationStatus
+    reviewed_content_hash: str
+    reviewed_by: str
+    note: str | None
     created_at: datetime
 
 
