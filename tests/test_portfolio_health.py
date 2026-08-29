@@ -154,4 +154,3 @@ def test_portfolio_health_classifies_deadlines_progress_and_failures(client):
     assert len(limited["goals"]) == 1
     assert len(limited["projects"]) == 1
     assert limited["summary"] == body["summary"]
-
