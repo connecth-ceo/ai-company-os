@@ -180,6 +180,10 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .provenance-detail a { color: var(--forest); font-weight: 800; }
 .provenance-detail code { overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .provenance-no-link { color: var(--muted); }
+.provenance-actions { display: flex; gap: 7px; margin-top: 11px; }
+.provenance-actions button { border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface); color: var(--forest); font-size: 11px; font-weight: 800; }
+.provenance-actions button.danger { color: #8a3821; }
+.provenance-actions button:disabled { cursor: wait; opacity: .55; }
 .activity-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .activity-item { border-left: 2px solid var(--lime); padding-left: 12px; font-size: 13px; }
 .activity-item strong { display: block; }
