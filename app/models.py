@@ -809,6 +809,62 @@ class ExecutionAttempt(Base, TimestampMixin):
     outcome_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class ExecutionReceipt(Base):
+    """Append-only proof envelope for a terminal connector execution attempt."""
+
+    __tablename__ = "execution_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "execution_attempt_id",
+            name="uq_execution_receipt_execution_attempt",
+        ),
+        CheckConstraint(
+            "outcome IN ('succeeded', 'failed', 'uncertain')",
+            name="ck_execution_receipt_outcome",
+        ),
+        CheckConstraint(
+            "length(payload_hash) = 64",
+            name="ck_execution_receipt_payload_hash_length",
+        ),
+        CheckConstraint(
+            "provider_reference_hash IS NULL OR length(provider_reference_hash) = 64",
+            name="ck_execution_receipt_provider_reference_hash_length",
+        ),
+        CheckConstraint(
+            "response_hash IS NULL OR length(response_hash) = 64",
+            name="ck_execution_receipt_response_hash_length",
+        ),
+        CheckConstraint(
+            "outcome <> 'succeeded' OR "
+            "(provider_reference_hash IS NOT NULL AND response_hash IS NOT NULL)",
+            name="ck_execution_receipt_success_proof",
+        ),
+        CheckConstraint(
+            "(provider_reference_hash IS NULL AND response_hash IS NULL) OR "
+            "(provider_reference_hash IS NOT NULL AND response_hash IS NOT NULL)",
+            name="ck_execution_receipt_proof_pair",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    execution_attempt_id: Mapped[str] = mapped_column(
+        ForeignKey("execution_attempts.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    connector_key: Mapped[str] = mapped_column(String(80), index=True)
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[ExecutionAttemptStatus] = mapped_column(String(40), index=True)
+    outcome_code: Mapped[str] = mapped_column(String(120))
+    provider_reference_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    response_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    completed_by: Mapped[str] = mapped_column(String(100))
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class BriefingDelivery(Base, TimestampMixin):
     __tablename__ = "briefing_deliveries"
     __table_args__ = (

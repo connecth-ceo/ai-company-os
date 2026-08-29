@@ -1048,6 +1048,11 @@ class ExecutionAttemptComplete(BaseModel):
     outcome: Literal["succeeded", "failed", "uncertain"]
     outcome_code: str = Field(min_length=1, max_length=120)
     completed_by: str = Field(min_length=1, max_length=100)
+    provider_reference_hash: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    response_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def normalize_completion_text(self) -> "ExecutionAttemptComplete":
@@ -1055,7 +1060,28 @@ class ExecutionAttemptComplete(BaseModel):
         self.completed_by = self.completed_by.strip()
         if not self.outcome_code or not self.completed_by:
             raise ValueError("Completion fields must contain visible text")
+        proof_supplied = self.provider_reference_hash is not None
+        if proof_supplied != (self.response_hash is not None):
+            raise ValueError("Provider reference and response hashes must be supplied together")
+        if self.outcome == "succeeded" and not proof_supplied:
+            raise ValueError("Successful execution requires both provider proof hashes")
         return self
+
+
+class ExecutionReceiptRead(ORMModel):
+    id: str
+    tenant_id: str
+    execution_attempt_id: str
+    connector_key: str
+    action_type: str
+    payload_hash: str
+    outcome: ExecutionAttemptStatus
+    outcome_code: str
+    provider_reference_hash: str | None
+    response_hash: str | None
+    completed_by: str
+    observed_at: datetime
+    created_at: datetime
 
 
 class ExecutionAttemptRecoveryRunRequest(BaseModel):

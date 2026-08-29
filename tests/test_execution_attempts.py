@@ -6,6 +6,9 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import ActionIntent, ExecutionAttempt
 
+PROVIDER_REFERENCE_HASH = "a" * 64
+PROVIDER_RESPONSE_HASH = "b" * 64
+
 
 def action_payload(*, key: str = "execution-ledger-intent-001") -> dict:
     return {
@@ -360,6 +363,8 @@ def test_execution_attempt_completion_is_terminal_and_idempotent(client):
         "outcome": "succeeded",
         "outcome_code": "provider_confirmed",
         "completed_by": "connector_gateway",
+        "provider_reference_hash": PROVIDER_REFERENCE_HASH,
+        "response_hash": PROVIDER_RESPONSE_HASH,
     }
 
     first = client.post(
@@ -387,6 +392,99 @@ def test_execution_attempt_completion_is_terminal_and_idempotent(client):
     events = client.get("/api/v1/audit-events").json()
     succeeded = next(item for item in events if item["action"] == "execution_attempt.succeeded")
     assert succeeded["details"]["external_call_performed_by_this_service"] is False
+    assert succeeded["details"]["provider_proof_present"] is True
+
+    receipt_response = client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
+    )
+    assert receipt_response.status_code == 200
+    receipt = receipt_response.json()
+    assert receipt["execution_attempt_id"] == attempt["id"]
+    assert receipt["payload_hash"] == intent["payload_hash"]
+    assert receipt["outcome"] == "succeeded"
+    assert receipt["provider_reference_hash"] == PROVIDER_REFERENCE_HASH
+    assert receipt["response_hash"] == PROVIDER_RESPONSE_HASH
+
+
+def test_success_completion_requires_hash_only_provider_proof(client):
+    intent, attempt = create_claimed_attempt(client)
+
+    missing = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/complete",
+        json={
+            "expected_payload_hash": intent["payload_hash"],
+            "outcome": "succeeded",
+            "outcome_code": "provider_confirmed",
+            "completed_by": "connector_gateway",
+        },
+    )
+    partial = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/complete",
+        json={
+            "expected_payload_hash": intent["payload_hash"],
+            "outcome": "succeeded",
+            "outcome_code": "provider_confirmed",
+            "completed_by": "connector_gateway",
+            "provider_reference_hash": PROVIDER_REFERENCE_HASH,
+        },
+    )
+
+    assert missing.status_code == 422
+    assert partial.status_code == 422
+    assert client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
+    ).status_code == 404
+
+
+def test_execution_receipt_rejects_conflicting_proof_and_is_tenant_isolated(client):
+    intent, attempt = create_claimed_attempt(client)
+    payload = {
+        "expected_payload_hash": intent["payload_hash"],
+        "outcome": "succeeded",
+        "outcome_code": "provider_confirmed",
+        "completed_by": "connector_gateway",
+        "provider_reference_hash": PROVIDER_REFERENCE_HASH,
+        "response_hash": PROVIDER_RESPONSE_HASH,
+    }
+    assert client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/complete",
+        json=payload,
+    ).status_code == 200
+
+    conflict = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/complete",
+        json={**payload, "response_hash": "c" * 64},
+    )
+    other_tenant = client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/receipt",
+        headers={"X-Tenant-ID": "other"},
+    )
+
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "completion_receipt_conflict"
+    assert other_tenant.status_code == 404
+    assert other_tenant.json()["detail"]["code"] == "receipt_not_found"
+
+
+def test_failed_completion_creates_receipt_without_provider_proof(client):
+    intent, attempt = create_claimed_attempt(client)
+    completed = client.post(
+        f"/api/v1/execution-attempts/{attempt['id']}/complete",
+        json={
+            "expected_payload_hash": intent["payload_hash"],
+            "outcome": "failed",
+            "outcome_code": "provider_rejected",
+            "completed_by": "connector_gateway",
+        },
+    )
+
+    assert completed.status_code == 200
+    receipt = client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
+    ).json()
+    assert receipt["outcome"] == "failed"
+    assert receipt["provider_reference_hash"] is None
+    assert receipt["response_hash"] is None
 
 
 def test_execution_attempt_cannot_complete_before_claim(client):
@@ -468,6 +566,11 @@ def test_execution_attempt_recovery_quarantines_without_retry(client):
     stored = client.get("/api/v1/execution-attempts").json()[0]
     assert stored["status"] == "uncertain"
     assert stored["outcome_code"] == "deadline_exceeded_without_confirmation"
+    receipt = client.get(
+        f"/api/v1/execution-attempts/{attempt['id']}/receipt"
+    ).json()
+    assert receipt["outcome"] == "uncertain"
+    assert receipt["outcome_code"] == "deadline_exceeded_without_confirmation"
     events = client.get("/api/v1/audit-events").json()
     uncertain = next(item for item in events if item["action"] == "execution_attempt.uncertain")
     assert uncertain["details"]["automatic_retry_started"] is False

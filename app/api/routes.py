@@ -33,6 +33,7 @@ from app.models import (
     DecisionStatus,
     Delegation,
     ExecutionAttempt,
+    ExecutionReceipt,
     Goal,
     KnowledgeItem,
     Memory,
@@ -91,6 +92,7 @@ from app.schemas import (
     ExecutionAttemptRead,
     ExecutionAttemptRecoveryRead,
     ExecutionAttemptRecoveryRunRequest,
+    ExecutionReceiptRead,
     GoalCreate,
     GoalRead,
     GoalTransition,
@@ -253,7 +255,11 @@ async def get_action_intent(
 def execution_attempt_rejection(
     error: execution_attempts.ExecutionAttemptRejected,
 ) -> HTTPException:
-    status_code = 404 if error.code in {"intent_not_found", "attempt_not_found"} else 409
+    status_code = (
+        404
+        if error.code in {"intent_not_found", "attempt_not_found", "receipt_not_found"}
+        else 409
+    )
     return HTTPException(
         status_code=status_code,
         detail={"code": error.code, "message": error.detail},
@@ -320,6 +326,25 @@ async def preflight_execution_attempt(
 ) -> ExecutionAttemptPreflightRead:
     try:
         return await execution_attempts.preflight_execution_attempt(
+            session,
+            tenant_id=context.tenant_id,
+            attempt_id=attempt_id,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        raise execution_attempt_rejection(exc) from exc
+
+
+@router.get(
+    "/execution-attempts/{attempt_id}/receipt",
+    response_model=ExecutionReceiptRead,
+)
+async def get_execution_receipt(
+    attempt_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionReceipt:
+    try:
+        return await execution_attempts.get_execution_receipt(
             session,
             tenant_id=context.tenant_id,
             attempt_id=attempt_id,

@@ -19,6 +19,8 @@ from app.models import (
     ApprovalStatus,
     ExecutionAttempt,
     ExecutionAttemptStatus,
+    ExecutionReceipt,
+    uuid_str,
 )
 from app.schemas import (
     ExecutionAttemptClaim,
@@ -59,6 +61,52 @@ def _require_connector_payload(action_type: str, payload: dict) -> None:
 
 def _as_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _record_receipt(
+    session: AsyncSession,
+    *,
+    attempt: ExecutionAttempt,
+    outcome: ExecutionAttemptStatus,
+    outcome_code: str,
+    completed_by: str,
+    observed_at: datetime,
+    provider_reference_hash: str | None = None,
+    response_hash: str | None = None,
+) -> ExecutionReceipt:
+    receipt = ExecutionReceipt(
+        id=uuid_str(),
+        tenant_id=attempt.tenant_id,
+        execution_attempt_id=attempt.id,
+        connector_key=attempt.connector_key,
+        action_type=attempt.action_type,
+        payload_hash=attempt.payload_hash,
+        outcome=outcome,
+        outcome_code=outcome_code,
+        provider_reference_hash=provider_reference_hash,
+        response_hash=response_hash,
+        completed_by=completed_by,
+        observed_at=observed_at,
+    )
+    session.add(receipt)
+    return receipt
+
+
+async def get_execution_receipt(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    attempt_id: str,
+) -> ExecutionReceipt:
+    receipt = await session.scalar(
+        select(ExecutionReceipt).where(
+            ExecutionReceipt.execution_attempt_id == attempt_id,
+            ExecutionReceipt.tenant_id == tenant_id,
+        )
+    )
+    if receipt is None:
+        raise ExecutionAttemptRejected("receipt_not_found", "Execution receipt not found")
+    return receipt
 
 
 async def preflight_execution_attempt(
@@ -396,6 +444,30 @@ async def claim_execution_attempt(
             attempt.status = ExecutionAttemptStatus.FAILED
             attempt.completed_at = current
             attempt.outcome_code = "intent_expired_before_claim"
+            receipt = _record_receipt(
+                session,
+                attempt=attempt,
+                outcome=ExecutionAttemptStatus.FAILED,
+                outcome_code=attempt.outcome_code,
+                completed_by=actor,
+                observed_at=current,
+            )
+            add_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor=actor,
+                action="execution_attempt.failed",
+                resource_type="execution_attempt",
+                resource_id=attempt.id,
+                details={
+                    "receipt_id": receipt.id,
+                    "action_intent_id": intent.id,
+                    "connector_key": attempt.connector_key,
+                    "payload_hash": attempt.payload_hash,
+                    "outcome_code": attempt.outcome_code,
+                    "external_call_started": False,
+                },
+            )
         raise
 
     attempt.status = ExecutionAttemptStatus.CLAIMED
@@ -459,7 +531,32 @@ async def complete_execution_attempt(
     outcome = ExecutionAttemptStatus(payload.outcome)
     if attempt.status in terminal_statuses:
         if attempt.status == outcome and attempt.outcome_code == payload.outcome_code:
-            return attempt
+            receipt = await session.scalar(
+                select(ExecutionReceipt).where(
+                    ExecutionReceipt.execution_attempt_id == attempt.id
+                )
+            )
+            if receipt is None:
+                _record_receipt(
+                    session,
+                    attempt=attempt,
+                    outcome=outcome,
+                    outcome_code=payload.outcome_code,
+                    completed_by=payload.completed_by,
+                    observed_at=attempt.completed_at or current,
+                    provider_reference_hash=payload.provider_reference_hash,
+                    response_hash=payload.response_hash,
+                )
+                return attempt
+            if (
+                receipt.provider_reference_hash == payload.provider_reference_hash
+                and receipt.response_hash == payload.response_hash
+            ):
+                return attempt
+            raise ExecutionAttemptRejected(
+                "completion_receipt_conflict",
+                "Execution receipt is already bound to different provider proof hashes",
+            )
         raise ExecutionAttemptRejected(
             "attempt_already_completed",
             "Execution attempt already has a different terminal outcome",
@@ -495,6 +592,16 @@ async def complete_execution_attempt(
     attempt.status = outcome
     attempt.outcome_code = payload.outcome_code
     attempt.completed_at = current
+    receipt = _record_receipt(
+        session,
+        attempt=attempt,
+        outcome=outcome,
+        outcome_code=payload.outcome_code,
+        completed_by=payload.completed_by,
+        observed_at=current,
+        provider_reference_hash=payload.provider_reference_hash,
+        response_hash=payload.response_hash,
+    )
     add_audit_event(
         session,
         tenant_id=tenant_id,
@@ -503,11 +610,13 @@ async def complete_execution_attempt(
         resource_type="execution_attempt",
         resource_id=attempt.id,
         details={
+            "receipt_id": receipt.id,
             "action_intent_id": intent.id,
             "connector_key": attempt.connector_key,
             "payload_hash": attempt.payload_hash,
             "completed_by": payload.completed_by,
             "outcome_code": attempt.outcome_code,
+            "provider_proof_present": payload.provider_reference_hash is not None,
             "external_call_performed_by_this_service": False,
         },
     )
@@ -561,6 +670,14 @@ async def run_execution_attempt_recovery(
         attempt.status = ExecutionAttemptStatus.UNCERTAIN
         attempt.completed_at = current
         attempt.outcome_code = "deadline_exceeded_without_confirmation"
+        receipt = _record_receipt(
+            session,
+            attempt=attempt,
+            outcome=ExecutionAttemptStatus.UNCERTAIN,
+            outcome_code=attempt.outcome_code,
+            completed_by=actor,
+            observed_at=current,
+        )
         add_audit_event(
             session,
             tenant_id=tenant_id,
@@ -569,6 +686,7 @@ async def run_execution_attempt_recovery(
             resource_type="execution_attempt",
             resource_id=attempt.id,
             details={
+                "receipt_id": receipt.id,
                 "action_intent_id": attempt.action_intent_id,
                 "connector_key": attempt.connector_key,
                 "payload_hash": attempt.payload_hash,

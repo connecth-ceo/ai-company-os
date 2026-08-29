@@ -23,6 +23,7 @@ ActionIntent 하나에는 ExecutionAttempt 하나만 허용한다. 실패했거�
 - `GET /api/v1/execution-attempts`: 테넌트별 원장 조회
 - `POST /api/v1/execution-attempts/{id}/claim`: 실행기의 단일사용 권한 원자적 claim
 - `POST /api/v1/execution-attempts/{id}/complete`: 성공·실패·불확실 결과 종결
+- `GET /api/v1/execution-attempts/{id}/receipt`: 원문 없는 불변 실행 증빙 조회
 - `POST /api/v1/execution-attempts/recovery/run`: timeout claim dry-run 진단 또는 격리
 
 모든 API는 APP_API_KEY 인증과 테넌트 격리를 적용한다. 요청에는 connector 자격증명이 아니라 connector
@@ -34,5 +35,9 @@ ActionIntent 하나에는 ExecutionAttempt 하나만 허용한다. 실패했거�
 - audit event의 `external_call_started`는 현재 항상 `false`다.
 - payload와 비밀값을 ExecutionAttempt에 복제하지 않고 ActionIntent payload hash만 보관한다.
 - 실제 connector는 아직 catalog에 없고 완료 API도 connector를 호출하지 않는다.
+- 성공 완료에는 공급자 참조값과 응답 원문의 SHA-256 해시가 모두 필요하다. 원문, 토큰,
+  자격증명은 영수증에 저장하지 않는다.
+- 모든 신규 종결은 시도당 하나뿐인 `ExecutionReceipt`와 같은 트랜잭션에 기록된다. 같은
+  완료 요청은 동일 영수증으로 멱등 처리하고 다른 증빙 해시로 덮어쓸 수 없다.
 - timeout recovery는 기본 비활성이며 활성화해도 자동 재시도하지 않고 `uncertain`으로 격리한다.
 - 다음 단계에서 connector gateway가 claim·외부 호출·complete를 하나의 제한된 실행 흐름으로 결합해야 한다.
