@@ -132,7 +132,7 @@ async def build_decision_readiness(
     *,
     include_ready: bool = False,
     include_closed: bool = False,
-    limit: int = 100,
+    limit: int | None = 100,
     now: datetime | None = None,
 ) -> DecisionReadinessRead:
     """Build a deterministic, tenant-safe readiness queue without writes or AI calls."""
@@ -205,5 +205,5 @@ async def build_decision_readiness(
         rule_version=RULE_VERSION,
         generated_at=current,
         summary=summary,
-        items=selected[:limit],
+        items=selected if limit is None else selected[:limit],
     )

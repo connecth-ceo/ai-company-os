@@ -54,7 +54,7 @@ def test_attention_queue_is_empty_without_signals(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["rule_version"] == "attention-rules-v1"
+    assert body["rule_version"] == "attention-rules-v2"
     assert body["total"] == 0
     assert body["items"] == []
     assert body["counts"] == {
@@ -217,3 +217,101 @@ def test_daily_briefing_includes_top_attention_without_ai_call(client):
     assert "대표 주의 큐" in briefing
     assert "[긴급] 대표 승인 대기: 중요 계약 승인" in briefing
     assert "승인 또는 거절 결정을 내려 주세요." in briefing
+
+
+def test_decision_governance_combines_readiness_and_follow_through_tenant_safely(client):
+    decision = client.post(
+        "/api/v1/decisions",
+        json={
+            "subject": "신규 운영 기준",
+            "choice": "검증 후 실행한다.",
+            "rationale": "대표의 초기 판단",
+        },
+    ).json()
+    client.post(
+        "/api/v1/decisions",
+        headers={"X-Tenant-ID": "other"},
+        json={
+            "subject": "다른 회사 결정",
+            "choice": "격리한다.",
+            "rationale": "다른 회사 판단",
+        },
+    )
+
+    body = client.get("/api/v1/attention?kind=decision_governance").json()
+
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["resource_id"] == decision["id"]
+    assert item["resource_type"] == "decision"
+    assert item["level"] == "decision"
+    assert item["evidence"]["readiness_level"] == "review"
+    assert item["evidence"]["follow_through_level"] == "untracked"
+    assert item["evidence"]["total_commitments"] == 0
+
+
+def test_verified_and_planned_decision_does_not_create_attention(client):
+    decision = client.post(
+        "/api/v1/decisions",
+        json={
+            "subject": "검증 완료 운영 기준",
+            "choice": "계획대로 실행한다.",
+            "rationale": "대표의 검증 대상 판단",
+        },
+    ).json()
+    record = client.get(f"/api/v1/provenance?decision_id={decision['id']}").json()[0]
+    reviewed = client.post(
+        f"/api/v1/provenance/{record['id']}/reviews",
+        json={
+            "decision": "verified",
+            "expected_content_hash": record["content_hash"],
+            "reviewed_by": "CEO",
+            "note": "근거 확인 완료",
+            "idempotency_key": "attention-decision-verified-001",
+        },
+    )
+    assert reviewed.status_code == 201
+    commitment = client.post(
+        "/api/v1/commitments",
+        json={
+            "statement": "검증 완료 결정을 실행한다.",
+            "owner_id": "chief_of_staff",
+            "due_at": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+            "decision_id": decision["id"],
+        },
+    )
+    assert commitment.status_code == 201
+
+    body = client.get("/api/v1/attention?kind=decision_governance").json()
+
+    assert body["total"] == 0
+    assert body["items"] == []
+
+
+def test_daily_briefing_includes_decision_governance_signal(client):
+    decision = client.post(
+        "/api/v1/decisions",
+        json={
+            "subject": "대표 브리핑 대상 결정",
+            "choice": "근거 검토 후 실행한다.",
+            "rationale": "브리핑 통합 검사",
+        },
+    )
+    assert decision.status_code == 201
+
+    async def build() -> str:
+        async with SessionLocal() as session:
+            from app.services.daily_briefing import build_daily_briefing
+
+            return await build_daily_briefing(
+                session,
+                "owner",
+                now=datetime.now(UTC),
+                settings=Settings(ai_provider="mock"),
+            )
+
+    briefing = asyncio.run(build())
+
+    assert "대표 확인 필요 1건" in briefing
+    assert "[결정] 대표 결정 확인: 대표 브리핑 대상 결정" in briefing
+    assert "제안 상태나 미검증 근거를 검토해 결정의 효력을 확인해 주세요." in briefing

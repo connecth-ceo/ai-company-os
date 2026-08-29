@@ -136,6 +136,7 @@ class AttentionKind(StrEnum):
     LONG_RUNNING_TASK = "long_running_task"
     TASK_FAILURE = "task_failure"
     PENDING_APPROVAL = "pending_approval"
+    DECISION_GOVERNANCE = "decision_governance"
 
 
 class BriefingDeliveryStatus(StrEnum):

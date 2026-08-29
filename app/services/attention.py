@@ -15,9 +15,18 @@ from app.models import (
     TaskRun,
     TaskStatus,
 )
-from app.schemas import AttentionItemRead, AttentionQueueRead
+from app.schemas import (
+    AttentionItemRead,
+    AttentionQueueRead,
+    DecisionFollowThroughItemRead,
+    DecisionFollowThroughLevel,
+    DecisionReadinessItemRead,
+    DecisionReadinessLevel,
+)
+from app.services.decision_follow_through import build_decision_follow_through
+from app.services.decision_readiness import build_decision_readiness
 
-RULE_VERSION = "attention-rules-v1"
+RULE_VERSION = "attention-rules-v2"
 LEVEL_ORDER = {
     AttentionLevel.INFO: 0,
     AttentionLevel.WATCH: 1,
@@ -39,6 +48,68 @@ def _age_seconds(current: datetime, detected_at: datetime) -> int:
 
 def _item_id(kind: AttentionKind, resource_id: str) -> str:
     return f"{kind.value}:{resource_id}"
+
+
+def _decision_detected_at(
+    readiness: DecisionReadinessItemRead,
+    follow_through: DecisionFollowThroughItemRead | None,
+) -> datetime:
+    if readiness.readiness_reason == "expiration_overdue" and readiness.expires_at:
+        return as_utc(readiness.expires_at)
+    if readiness.readiness_reason == "review_overdue" and readiness.review_due_at:
+        return as_utc(readiness.review_due_at)
+    if (
+        follow_through is not None
+        and follow_through.follow_through_level == DecisionFollowThroughLevel.AT_RISK
+        and follow_through.next_due_at is not None
+    ):
+        return as_utc(follow_through.next_due_at)
+    return as_utc(readiness.effective_at)
+
+
+def _decision_recommendation(
+    readiness: DecisionReadinessItemRead,
+    follow_through: DecisionFollowThroughItemRead | None,
+) -> str:
+    if readiness.readiness_level == DecisionReadinessLevel.BLOCKED:
+        return "근거와 유효기간을 확인한 뒤 결정의 유지·정정·철회 여부를 판단해 주세요."
+    if (
+        follow_through is not None
+        and follow_through.follow_through_level == DecisionFollowThroughLevel.AT_RISK
+    ):
+        return "지연되거나 취소된 후속조치의 담당자·기한·대체 행동을 결정해 주세요."
+    if readiness.readiness_level == DecisionReadinessLevel.REVIEW:
+        return "제안 상태나 미검증 근거를 검토해 결정의 효력을 확인해 주세요."
+    if (
+        follow_through is not None
+        and follow_through.follow_through_level == DecisionFollowThroughLevel.UNTRACKED
+    ):
+        return "이 결정을 실행할 담당자와 마감일이 있는 후속 약속을 연결해 주세요."
+    return "재검토일·만료일 또는 관찰 근거를 확인해 주세요."
+
+
+def _decision_level(
+    readiness: DecisionReadinessItemRead,
+    follow_through: DecisionFollowThroughItemRead | None,
+) -> AttentionLevel | None:
+    candidates: list[AttentionLevel] = []
+    readiness_levels = {
+        DecisionReadinessLevel.BLOCKED: AttentionLevel.CRITICAL,
+        DecisionReadinessLevel.REVIEW: AttentionLevel.DECISION,
+        DecisionReadinessLevel.WATCH: AttentionLevel.WATCH,
+    }
+    follow_through_levels = {
+        DecisionFollowThroughLevel.AT_RISK: AttentionLevel.DECISION,
+        DecisionFollowThroughLevel.UNTRACKED: AttentionLevel.ACTION,
+    }
+    readiness_level = readiness_levels.get(readiness.readiness_level)
+    if readiness_level is not None:
+        candidates.append(readiness_level)
+    if follow_through is not None:
+        follow_through_level = follow_through_levels.get(follow_through.follow_through_level)
+        if follow_through_level is not None:
+            candidates.append(follow_through_level)
+    return max(candidates, key=LEVEL_ORDER.__getitem__) if candidates else None
 
 
 async def build_attention_queue(
@@ -231,6 +302,65 @@ async def build_attention_queue(
                     "reason": approval.reason[:500],
                     "task_id": approval.task_id,
                     "pending_seconds": age,
+                },
+            )
+        )
+
+    readiness_queue = await build_decision_readiness(
+        session,
+        tenant_id,
+        include_ready=True,
+        include_closed=True,
+        limit=None,
+        now=current,
+    )
+    follow_through_queue = await build_decision_follow_through(
+        session,
+        tenant_id,
+        include_complete=True,
+        include_inactive=True,
+        limit=None,
+        now=current,
+    )
+    follow_through_by_id = {item.id: item for item in follow_through_queue.items}
+    for readiness in readiness_queue.items:
+        follow_through = follow_through_by_id.get(readiness.id)
+        level = _decision_level(readiness, follow_through)
+        if level is None:
+            continue
+        detected_at = _decision_detected_at(readiness, follow_through)
+        follow_level = (
+            follow_through.follow_through_level.value if follow_through is not None else None
+        )
+        follow_reason = (
+            follow_through.follow_through_reason if follow_through is not None else None
+        )
+        items.append(
+            AttentionItemRead(
+                id=_item_id(AttentionKind.DECISION_GOVERNANCE, readiness.id),
+                level=level,
+                kind=AttentionKind.DECISION_GOVERNANCE,
+                title="대표 결정 확인",
+                summary=f"{readiness.subject}: {readiness.choice}"[:1_000],
+                recommendation=_decision_recommendation(readiness, follow_through),
+                resource_type="decision",
+                resource_id=readiness.id,
+                project_id=readiness.applies_to.get("project_id"),
+                detected_at=detected_at,
+                age_seconds=_age_seconds(current, detected_at),
+                evidence={
+                    "readiness_level": readiness.readiness_level.value,
+                    "readiness_reason": readiness.readiness_reason,
+                    "readiness_signals": ",".join(readiness.signals),
+                    "follow_through_level": follow_level,
+                    "follow_through_reason": follow_reason,
+                    "total_evidence": readiness.total_evidence,
+                    "total_commitments": (
+                        follow_through.total_commitments if follow_through is not None else 0
+                    ),
+                    "overdue_commitments": (
+                        follow_through.overdue_commitments if follow_through is not None else 0
+                    ),
                 },
             )
         )

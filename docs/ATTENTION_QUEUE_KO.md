@@ -5,7 +5,7 @@
 Attention Queue는 대표가 지금 확인해야 할 예외를 기존 운영 데이터에서 결정론적으로 계산합니다. LLM을
 호출하거나 새 업무를 실행하지 않으며, Task의 입력 우선순위와도 분리됩니다.
 
-## 탐지 규칙 v1
+## 탐지 규칙 v2
 
 | 종류 | 조건 | 수준 |
 |---|---|---|
@@ -13,6 +13,7 @@ Attention Queue는 대표가 지금 확인해야 할 예외를 기존 운영 데
 | 장기 실행 | Task `running` 상태가 설정된 시간 이상 유지 | 기준 이상 `action`, 기준 2배 이상 `critical` |
 | 업무 실패 | Task가 `failed` | 실패 1회 `watch`, 2회 `decision`, 3회 이상 `critical` |
 | 승인 적체 | Approval이 `pending` | 기본 `decision`, `critical` 위험 또는 72시간 이상 대기 시 `critical` |
+| 결정 거버넌스 | Decision readiness와 follow-through를 결정 ID별로 통합 | 근거·기한 차단 `critical`, 검토 필요·후속 위험 `decision`, 후속 미연결 `action`, 관찰 신호 `watch` |
 
 기본 설정은 `ATTENTION_TASK_STALE_SECONDS=1200`,
 `ATTENTION_COMMITMENT_DECISION_HOURS=24`, `ATTENTION_COMMITMENT_CRITICAL_HOURS=72`,
@@ -23,10 +24,13 @@ Attention Queue는 대표가 지금 확인해야 할 예외를 기존 운영 데
 - `GET /api/v1/attention`
 - 최소 수준: `?min_level=decision`
 - 종류: `?kind=overdue_commitment`
+- 결정 거버넌스만: `?kind=decision_governance`
 - 개수 제한: `?limit=20`
 
 응답에는 규칙 버전, 생성시각, 수준별 건수와 항목이 포함됩니다. 각 항목의 ID는
-`종류:원본 리소스 ID`로 결정되므로 같은 원인에서 중복 항목이 생기지 않습니다.
+`종류:원본 리소스 ID`로 결정되므로 같은 원인에서 중복 항목이 생기지 않습니다. 결정 거버넌스는
+`decision_governance:<decision_id>` 하나에 근거 신뢰도와 후속 실행 상태를 함께 담아 같은 결정을 두 번
+올리지 않습니다. 검증 완료 근거와 유효한 후속 약속을 모두 가진 결정은 주의 큐에서 제외됩니다.
 
 ## CEO Desk와 Telegram
 

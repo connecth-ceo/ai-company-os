@@ -74,7 +74,7 @@ async def build_decision_follow_through(
     *,
     include_complete: bool = False,
     include_inactive: bool = False,
-    limit: int = 100,
+    limit: int | None = 100,
     now: datetime | None = None,
 ) -> DecisionFollowThroughRead:
     """Build a deterministic execution-link queue without writes or AI calls."""
@@ -144,5 +144,5 @@ async def build_decision_follow_through(
         rule_version=RULE_VERSION,
         generated_at=current,
         summary=summary,
-        items=selected[:limit],
+        items=selected if limit is None else selected[:limit],
     )
