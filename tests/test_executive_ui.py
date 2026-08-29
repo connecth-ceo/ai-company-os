@@ -13,6 +13,8 @@ def test_ceo_desk_exposes_project_and_ai_team_panels(client):
     assert 'id="agent-list"' in html
     assert 'id="context-search-form"' in html
     assert 'id="context-search-results"' in html
+    assert 'id="decision-readiness"' in html
+    assert 'id="decision-readiness-list"' in html
     assert 'id="provenance-list"' in html
     assert 'id="provenance-quality"' in html
     assert 'id="provenance-quality-list"' in html
@@ -31,6 +33,7 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert 'api("/api/v1/agents")' in script.text
     assert 'api("/api/v1/provenance?limit=20")' in script.text
     assert 'api("/api/v1/provenance/quality?limit=8")' in script.text
+    assert 'api("/api/v1/decisions/readiness?limit=6")' in script.text
     assert "/api/v1/context/search?q=" in script.text
     assert 'project_id: $("#task-project").value || null' in script.text
     assert 'goal_id: $("#project-goal-id").value || null' in script.text
@@ -40,6 +43,7 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert "renderAgents()" in script.text
     assert "renderProvenance()" in script.text
     assert "renderProvenanceQuality()" in script.text
+    assert "renderDecisionReadiness()" in script.text
     assert "data-provenance-review" in script.text
     assert "/reviews`" in script.text
     assert "/transition`" in script.text
@@ -55,3 +59,4 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert ".provenance-list" in stylesheet.text
     assert ".provenance-actions" in stylesheet.text
     assert ".provenance-quality-list" in stylesheet.text
+    assert ".decision-readiness-list" in stylesheet.text
