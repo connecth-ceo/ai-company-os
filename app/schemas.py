@@ -18,6 +18,7 @@ from app.models import (
     CommitmentStatus,
     DecisionScope,
     DecisionStatus,
+    ExecutionAttemptStatus,
     GoalStatus,
     ProjectStatus,
     ProvenanceReviewDecision,
@@ -960,6 +961,47 @@ class ActionIntentRead(ORMModel):
     status: ActionIntentStatus
     expires_at: datetime
     decided_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExecutionAttemptPrepare(BaseModel):
+    expected_payload_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    connector_key: str = Field(pattern=r"^[a-z][a-z0-9_]{1,79}$")
+    idempotency_key: str = Field(min_length=8, max_length=100)
+    timeout_seconds: int = Field(default=60, ge=5, le=900)
+
+
+class ExecutionAttemptClaim(BaseModel):
+    expected_payload_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    claimed_by: str = Field(min_length=1, max_length=100)
+
+    @field_validator("claimed_by")
+    @classmethod
+    def normalize_claimed_by(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("claimed_by must contain visible text")
+        return normalized
+
+
+class ExecutionAttemptRead(ORMModel):
+    id: str
+    tenant_id: str
+    action_intent_id: str
+    approval_id: str
+    idempotency_key: str
+    connector_key: str
+    action_type: str
+    payload_hash: str
+    status: ExecutionAttemptStatus
+    timeout_seconds: int
+    requested_by: str
+    claimed_by: str | None
+    claimed_at: datetime | None
+    deadline_at: datetime | None
+    completed_at: datetime | None
+    outcome_code: str | None
     created_at: datetime
     updated_at: datetime
 

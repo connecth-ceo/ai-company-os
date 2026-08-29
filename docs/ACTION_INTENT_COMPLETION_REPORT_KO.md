@@ -44,10 +44,16 @@
 ## 아직 구현하지 않은 것
 
 - 승인된 ActionIntent의 실제 외부 실행
-- 1회성 consume와 실행 결과 원장
+- connector 호출 뒤 성공·실패·불확실 결과 전이
 - 외부 API credential vault
 - 자동 만료 sweep worker
 - 재시도, rate limit, 외부 비용·응답 저장
+
+## 후속 안전 경계 반영
+
+2026-08-29에 ExecutionAttempt 준비 원장, payload hash 재검사, timeout, idempotency와 원자적
+단일사용 claim/`consumed` 전이를 추가했습니다. 이 전이는 외부 API 호출이나 실행 성공을 의미하지 않으며,
+세부 기준은 [EXECUTION_ATTEMPT_LEDGER_KO.md](EXECUTION_ATTEMPT_LEDGER_KO.md)에 기록했습니다.
 
 ## 다음 권장 구현 단위
 

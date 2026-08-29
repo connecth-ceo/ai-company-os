@@ -152,6 +152,15 @@ class ActionIntentStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    CONSUMED = "consumed"
+
+
+class ExecutionAttemptStatus(StrEnum):
+    PREPARED = "prepared"
+    CLAIMED = "claimed"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    UNCERTAIN = "uncertain"
 
 
 class Base(DeclarativeBase):
@@ -712,7 +721,7 @@ class ActionIntent(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("tenant_id", "idempotency_key"),
         CheckConstraint(
-            "status IN ('proposed', 'approved', 'rejected', 'expired')",
+            "status IN ('proposed', 'approved', 'rejected', 'expired', 'consumed')",
             name="ck_action_intent_status",
         ),
         CheckConstraint(
@@ -742,6 +751,62 @@ class ActionIntent(Base, TimestampMixin):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExecutionAttempt(Base, TimestampMixin):
+    __tablename__ = "execution_attempts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        UniqueConstraint("action_intent_id", name="uq_execution_attempt_action_intent"),
+        CheckConstraint(
+            "status IN ('prepared', 'claimed', 'succeeded', 'failed', 'uncertain')",
+            name="ck_execution_attempt_status",
+        ),
+        CheckConstraint(
+            "timeout_seconds >= 5 AND timeout_seconds <= 900",
+            name="ck_execution_attempt_timeout",
+        ),
+        CheckConstraint(
+            "length(payload_hash) = 64",
+            name="ck_execution_attempt_payload_hash_length",
+        ),
+        CheckConstraint(
+            "(claimed_at IS NULL AND claimed_by IS NULL) OR "
+            "(claimed_at IS NOT NULL AND claimed_by IS NOT NULL)",
+            name="ck_execution_attempt_claim_identity",
+        ),
+        CheckConstraint(
+            "(status = 'prepared' AND claimed_at IS NULL AND deadline_at IS NULL "
+            "AND completed_at IS NULL) OR "
+            "(status = 'claimed' AND claimed_at IS NOT NULL AND deadline_at IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "(status IN ('succeeded', 'failed', 'uncertain') AND completed_at IS NOT NULL)",
+            name="ck_execution_attempt_state_timestamps",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    action_intent_id: Mapped[str] = mapped_column(
+        ForeignKey("action_intents.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    approval_id: Mapped[str] = mapped_column(
+        ForeignKey("approvals.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    connector_key: Mapped[str] = mapped_column(String(80), index=True)
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[ExecutionAttemptStatus] = mapped_column(
+        String(40), default=ExecutionAttemptStatus.PREPARED, index=True
+    )
+    timeout_seconds: Mapped[int] = mapped_column(Integer)
+    requested_by: Mapped[str] = mapped_column(String(100))
+    claimed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    outcome_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class BriefingDelivery(Base, TimestampMixin):

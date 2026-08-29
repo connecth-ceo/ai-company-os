@@ -1,0 +1,275 @@
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import (
+    ActionIntent,
+    ActionIntentStatus,
+    Approval,
+    ApprovalStatus,
+    ExecutionAttempt,
+    ExecutionAttemptStatus,
+)
+from app.schemas import ExecutionAttemptClaim, ExecutionAttemptPrepare
+from app.services.action_intents import verify_payload_integrity
+from app.services.audit import add_audit_event
+
+
+class ExecutionAttemptRejected(ValueError):
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+async def _load_intent(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    intent_id: str,
+) -> ActionIntent:
+    intent = await session.scalar(
+        select(ActionIntent)
+        .where(
+            ActionIntent.id == intent_id,
+            ActionIntent.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if intent is None:
+        raise ExecutionAttemptRejected("intent_not_found", "Action intent not found")
+    return intent
+
+
+async def _verify_execution_ready(
+    session: AsyncSession,
+    *,
+    intent: ActionIntent,
+    tenant_id: str,
+    expected_payload_hash: str,
+    current: datetime,
+) -> Approval:
+    try:
+        verify_payload_integrity(intent)
+    except ValueError as exc:
+        raise ExecutionAttemptRejected("payload_integrity_failed", str(exc)) from exc
+    if intent.payload_hash != expected_payload_hash:
+        raise ExecutionAttemptRejected(
+            "payload_hash_mismatch",
+            "Expected payload hash does not match the approved action intent",
+        )
+    if intent.status == ActionIntentStatus.CONSUMED:
+        raise ExecutionAttemptRejected(
+            "intent_already_consumed",
+            "Single-use action intent has already been consumed",
+        )
+    if intent.status != ActionIntentStatus.APPROVED:
+        raise ExecutionAttemptRejected(
+            "intent_not_approved",
+            "Action intent must be approved before execution preparation",
+        )
+    if current >= _as_utc(intent.expires_at):
+        intent.status = ActionIntentStatus.EXPIRED
+        add_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor="system:execution-gateway",
+            action="action_intent.expired",
+            resource_type="action_intent",
+            resource_id=intent.id,
+            details={
+                "approval_id": intent.approval_id,
+                "payload_hash": intent.payload_hash,
+                "phase": "execution_preparation",
+            },
+        )
+        raise ExecutionAttemptRejected(
+            "intent_expired",
+            "Action intent expired before execution preparation",
+        )
+
+    approval = await session.scalar(
+        select(Approval)
+        .where(
+            Approval.id == intent.approval_id,
+            Approval.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if approval is None or approval.status != ApprovalStatus.APPROVED:
+        raise ExecutionAttemptRejected(
+            "approval_not_approved",
+            "Linked approval must be approved before execution preparation",
+        )
+    return approval
+
+
+async def prepare_execution_attempt(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    actor: str,
+    intent_id: str,
+    payload: ExecutionAttemptPrepare,
+    now: datetime | None = None,
+) -> ExecutionAttempt:
+    current = now or datetime.now(UTC)
+    intent = await _load_intent(session, tenant_id=tenant_id, intent_id=intent_id)
+    approval = await _verify_execution_ready(
+        session,
+        intent=intent,
+        tenant_id=tenant_id,
+        expected_payload_hash=payload.expected_payload_hash,
+        current=current,
+    )
+
+    existing_key = await session.scalar(
+        select(ExecutionAttempt).where(
+            ExecutionAttempt.tenant_id == tenant_id,
+            ExecutionAttempt.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing_key is not None:
+        if (
+            existing_key.action_intent_id != intent.id
+            or existing_key.connector_key != payload.connector_key
+            or existing_key.payload_hash != payload.expected_payload_hash
+            or existing_key.timeout_seconds != payload.timeout_seconds
+        ):
+            raise ExecutionAttemptRejected(
+                "idempotency_conflict",
+                "Idempotency key is already bound to a different execution attempt",
+            )
+        return existing_key
+
+    existing_intent = await session.scalar(
+        select(ExecutionAttempt).where(ExecutionAttempt.action_intent_id == intent.id)
+    )
+    if existing_intent is not None:
+        raise ExecutionAttemptRejected(
+            "single_use_attempt_exists",
+            "Single-use action intent already has an execution attempt",
+        )
+
+    attempt = ExecutionAttempt(
+        tenant_id=tenant_id,
+        action_intent_id=intent.id,
+        approval_id=approval.id,
+        idempotency_key=payload.idempotency_key,
+        connector_key=payload.connector_key,
+        action_type=intent.action_type,
+        payload_hash=intent.payload_hash,
+        status=ExecutionAttemptStatus.PREPARED,
+        timeout_seconds=payload.timeout_seconds,
+        requested_by=actor,
+    )
+    session.add(attempt)
+    await session.flush()
+    add_audit_event(
+        session,
+        tenant_id=tenant_id,
+        actor=actor,
+        action="execution_attempt.prepared",
+        resource_type="execution_attempt",
+        resource_id=attempt.id,
+        details={
+            "action_intent_id": intent.id,
+            "approval_id": approval.id,
+            "connector_key": attempt.connector_key,
+            "action_type": attempt.action_type,
+            "payload_hash": attempt.payload_hash,
+            "timeout_seconds": attempt.timeout_seconds,
+            "external_call_started": False,
+        },
+    )
+    return attempt
+
+
+async def claim_execution_attempt(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    actor: str,
+    attempt_id: str,
+    payload: ExecutionAttemptClaim,
+    now: datetime | None = None,
+) -> ExecutionAttempt:
+    current = now or datetime.now(UTC)
+    attempt = await session.scalar(
+        select(ExecutionAttempt)
+        .where(
+            ExecutionAttempt.id == attempt_id,
+            ExecutionAttempt.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if attempt is None:
+        raise ExecutionAttemptRejected("attempt_not_found", "Execution attempt not found")
+    if attempt.payload_hash != payload.expected_payload_hash:
+        raise ExecutionAttemptRejected(
+            "payload_hash_mismatch",
+            "Expected payload hash does not match the prepared execution attempt",
+        )
+    if attempt.status == ExecutionAttemptStatus.CLAIMED:
+        if attempt.claimed_by == payload.claimed_by:
+            return attempt
+        raise ExecutionAttemptRejected(
+            "attempt_already_claimed",
+            "Execution attempt was already claimed by another executor",
+        )
+    if attempt.status != ExecutionAttemptStatus.PREPARED:
+        raise ExecutionAttemptRejected(
+            "attempt_not_prepared",
+            "Only a prepared execution attempt can be claimed",
+        )
+
+    intent = await _load_intent(
+        session,
+        tenant_id=tenant_id,
+        intent_id=attempt.action_intent_id,
+    )
+    try:
+        await _verify_execution_ready(
+            session,
+            intent=intent,
+            tenant_id=tenant_id,
+            expected_payload_hash=payload.expected_payload_hash,
+            current=current,
+        )
+    except ExecutionAttemptRejected as exc:
+        if exc.code == "intent_expired":
+            attempt.status = ExecutionAttemptStatus.FAILED
+            attempt.completed_at = current
+            attempt.outcome_code = "intent_expired_before_claim"
+        raise
+
+    attempt.status = ExecutionAttemptStatus.CLAIMED
+    attempt.claimed_by = payload.claimed_by
+    attempt.claimed_at = current
+    attempt.deadline_at = min(
+        _as_utc(intent.expires_at),
+        current + timedelta(seconds=attempt.timeout_seconds),
+    )
+    intent.status = ActionIntentStatus.CONSUMED
+    add_audit_event(
+        session,
+        tenant_id=tenant_id,
+        actor=actor,
+        action="execution_attempt.claimed",
+        resource_type="execution_attempt",
+        resource_id=attempt.id,
+        details={
+            "action_intent_id": intent.id,
+            "connector_key": attempt.connector_key,
+            "payload_hash": attempt.payload_hash,
+            "claimed_by": attempt.claimed_by,
+            "deadline_at": attempt.deadline_at.isoformat(),
+            "external_call_started": False,
+        },
+    )
+    return attempt

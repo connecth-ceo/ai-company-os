@@ -26,6 +26,7 @@ from app.models import (
     DecisionScope,
     DecisionStatus,
     Delegation,
+    ExecutionAttempt,
     Goal,
     KnowledgeItem,
     Memory,
@@ -75,6 +76,9 @@ from app.schemas import (
     DelegationRecoveryRequest,
     DelegationRecoveryResponse,
     DispatchResponse,
+    ExecutionAttemptClaim,
+    ExecutionAttemptPrepare,
+    ExecutionAttemptRead,
     GoalCreate,
     GoalRead,
     GoalTransition,
@@ -109,6 +113,7 @@ from app.services import (
     decision_follow_through,
     decision_memory,
     decision_readiness,
+    execution_attempts,
     portfolio,
     portfolio_health,
     provenance_quality,
@@ -231,6 +236,94 @@ async def get_action_intent(
     if item is None:
         raise HTTPException(status_code=404, detail="Action intent not found")
     return item
+
+
+def execution_attempt_rejection(
+    error: execution_attempts.ExecutionAttemptRejected,
+) -> HTTPException:
+    status_code = 404 if error.code in {"intent_not_found", "attempt_not_found"} else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
+@router.post(
+    "/action-intents/{intent_id}/execution-attempts",
+    response_model=ExecutionAttemptRead,
+    status_code=201,
+)
+async def prepare_execution_attempt(
+    intent_id: str,
+    payload: ExecutionAttemptPrepare,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttempt:
+    try:
+        attempt = await execution_attempts.prepare_execution_attempt(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            intent_id=intent_id,
+            payload=payload,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        if exc.code == "intent_expired":
+            await session.commit()
+        else:
+            await session.rollback()
+        raise execution_attempt_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(attempt)
+    return attempt
+
+
+@router.get("/execution-attempts", response_model=list[ExecutionAttemptRead])
+async def list_execution_attempts(
+    action_intent_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[ExecutionAttempt]:
+    conditions = [ExecutionAttempt.tenant_id == context.tenant_id]
+    if action_intent_id is not None:
+        conditions.append(ExecutionAttempt.action_intent_id == action_intent_id)
+    query = (
+        select(ExecutionAttempt)
+        .where(*conditions)
+        .order_by(ExecutionAttempt.created_at.desc())
+        .limit(limit)
+    )
+    return list(await session.scalars(query))
+
+
+@router.post(
+    "/execution-attempts/{attempt_id}/claim",
+    response_model=ExecutionAttemptRead,
+)
+async def claim_execution_attempt(
+    attempt_id: str,
+    payload: ExecutionAttemptClaim,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttempt:
+    try:
+        attempt = await execution_attempts.claim_execution_attempt(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            attempt_id=attempt_id,
+            payload=payload,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        if exc.code == "intent_expired":
+            await session.commit()
+        else:
+            await session.rollback()
+        raise execution_attempt_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(attempt)
+    return attempt
 
 
 @router.get("/tool-catalog", response_model=list[ToolDescriptorRead])

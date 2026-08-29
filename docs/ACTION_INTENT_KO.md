@@ -24,7 +24,8 @@
 - `GET /api/v1/action-intents/{id}`: 회사별 상세
 - `POST /api/v1/approvals/{approval_id}/decide`: 기존 승인 API로 함께 승인·거절
 
-ActionIntent 실행 API는 없습니다. 승인 상태가 `approved`가 되어도 외부 시스템 호출은 발생하지 않습니다.
+ActionIntent 자체의 실행 API는 없습니다. 승인 상태가 `approved`가 되어도 외부 시스템 호출은 발생하지
+않습니다. 별도 ExecutionAttempt API는 불변 원장 준비와 단일사용 claim만 기록합니다.
 
 ## 생성 예시
 
@@ -57,10 +58,10 @@ ActionIntent 실행 API는 없습니다. 승인 상태가 `approved`가 되어�
 ## 의도적으로 남긴 경계
 
 - `approved`는 실행 허가 기록일 뿐 실제 실행 성공이 아닙니다.
-- 실행 결과나 `consumed` 전이는 아직 없습니다.
+- ExecutionAttempt claim 시 `consumed` 전이가 추가됐지만 외부 API 호출이나 성공 결과는 아닙니다.
 - 외부 도구 자격증명은 payload에 저장하지 않습니다.
-- 다음 단계에서 ToolCall/ExecutionAttempt 원장, payload hash 재확인, 1회성 consume 원자성, timeout,
-  idempotency를 별도로 구현하기 전에는 쓰기 도구를 catalog에 추가하지 않습니다.
+- ExecutionAttempt 원장, payload hash 재확인, 1회성 consume 원자성, timeout, idempotency를 구현했습니다.
+  실제 connector 호출과 결과 전이가 완성되기 전에는 쓰기 도구를 catalog에 추가하지 않습니다.
 
 ## 배포 후 확인
 
