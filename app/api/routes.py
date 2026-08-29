@@ -1319,4 +1319,3 @@ async def list_audit_events(
         .limit(limit)
     )
     return list(await session.scalars(query))
-
