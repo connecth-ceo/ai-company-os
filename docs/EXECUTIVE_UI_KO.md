@@ -38,4 +38,3 @@
 - JavaScript가 `/api/v1/goals`, `/api/v1/projects`, `/api/v1/agents`를 사용하는지 검사한다.
 - 프로젝트를 선택한 신규 업무가 `project_id`를 전달하는지 회귀 테스트로 고정한다.
 - 목표·프로젝트 상태 버튼이 각 `/transition` API를 호출하는지 검사한다.
-
