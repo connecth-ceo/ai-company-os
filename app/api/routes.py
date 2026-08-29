@@ -58,6 +58,7 @@ from app.schemas import (
     CompanyContextSearchResponse,
     DecisionCreate,
     DecisionRead,
+    DecisionReadinessRead,
     DecisionTransition,
     DelegatedTaskCreate,
     DelegationDispatchResponse,
@@ -94,6 +95,7 @@ from app.services import (
     commitments,
     company_search,
     decision_memory,
+    decision_readiness,
     portfolio,
     portfolio_health,
     provenance_quality,
@@ -1044,6 +1046,23 @@ async def list_decisions(
         .limit(limit)
     )
     return list(await session.scalars(query))
+
+
+@router.get("/decisions/readiness", response_model=DecisionReadinessRead)
+async def get_decision_readiness(
+    include_ready: bool = Query(default=False),
+    include_closed: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> DecisionReadinessRead:
+    return await decision_readiness.build_decision_readiness(
+        session,
+        context.tenant_id,
+        include_ready=include_ready,
+        include_closed=include_closed,
+        limit=limit,
+    )
 
 
 @router.get("/decisions/{decision_id}", response_model=DecisionRead)
