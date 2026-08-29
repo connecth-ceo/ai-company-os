@@ -332,9 +332,7 @@ async def build_attention_queue(
         follow_level = (
             follow_through.follow_through_level.value if follow_through is not None else None
         )
-        follow_reason = (
-            follow_through.follow_through_reason if follow_through is not None else None
-        )
+        follow_reason = follow_through.follow_through_reason if follow_through is not None else None
         items.append(
             AttentionItemRead(
                 id=_item_id(AttentionKind.DECISION_GOVERNANCE, readiness.id),
