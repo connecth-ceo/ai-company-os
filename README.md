@@ -28,6 +28,7 @@
 - 기억·유효한 대표 결정·지식을 비용 없이 찾는 테넌트별 통합 검색
 - 대표 결정의 제안·활성·철회·만료·대체 이력과 적용 범위 관리
 - 연구·대표 결정의 출처 URL, TaskRun, 내용 해시와 검증 상태를 잇는 읽기 전용 근거 원장
+- 내용 해시 재확인, 검증·반려·정정 이력과 감사 이벤트를 갖춘 근거 검토 원장
 - 담당자·마감일·출처·관련 결정이 있는 약속/후속조치와 기한 초과 추적
 - 지연 약속·장기 실행·업무 실패·승인 적체를 비용 없이 정렬하는 대표 주의 큐
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
@@ -122,6 +123,9 @@ AI 직원 역할·버전·도구·승인 정책 조회 기준은
 연구 산출물과 대표 결정의 출처·실행·해시 연결은
 [docs/PROVENANCE_FOUNDATION_KO.md](docs/PROVENANCE_FOUNDATION_KO.md), 구현·검증 범위는
 [docs/PROVENANCE_FOUNDATION_COMPLETION_REPORT_KO.md](docs/PROVENANCE_FOUNDATION_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
+대표의 근거 검증·반려·정정 이력과 해시 무결성 규칙은
+[docs/PROVENANCE_REVIEW_KO.md](docs/PROVENANCE_REVIEW_KO.md), 구현·검증 범위는
+[docs/PROVENANCE_REVIEW_COMPLETION_REPORT_KO.md](docs/PROVENANCE_REVIEW_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 
