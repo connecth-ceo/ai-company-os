@@ -20,6 +20,9 @@ from app.models import (
     DecisionStatus,
     GoalStatus,
     ProjectStatus,
+    ProvenanceSourceType,
+    ProvenanceSubjectType,
+    ProvenanceVerificationStatus,
     ReviewVerdict,
     TaskStatus,
 )
@@ -551,6 +554,27 @@ class KnowledgeRead(ORMModel):
     content: str
     source: str | None
     task_id: str | None
+    created_at: datetime
+
+
+class ProvenanceRead(ORMModel):
+    id: str
+    tenant_id: str
+    subject_type: ProvenanceSubjectType
+    knowledge_item_id: str | None
+    decision_id: str | None
+    task_id: str | None
+    task_run_id: str | None
+    source_record_id: str | None
+    source_type: ProvenanceSourceType
+    source_uri: str | None
+    source_label: str
+    claim_reference: str | None
+    produced_by_agent: str | None
+    content_hash: str
+    verification_status: ProvenanceVerificationStatus
+    captured_at: datetime
+    record_metadata: dict[str, Any]
     created_at: datetime
 
 

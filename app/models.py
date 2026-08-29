@@ -78,6 +78,25 @@ class DecisionScope(StrEnum):
     DEPARTMENT = "department"
 
 
+class ProvenanceSubjectType(StrEnum):
+    KNOWLEDGE = "knowledge"
+    DECISION = "decision"
+
+
+class ProvenanceSourceType(StrEnum):
+    URL = "url"
+    TASK_RUN = "task_run"
+    MANUAL = "manual"
+    INHERITED = "inherited"
+
+
+class ProvenanceVerificationStatus(StrEnum):
+    UNVERIFIED = "unverified"
+    OBSERVED = "observed"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class CommitmentStatus(StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
@@ -512,6 +531,65 @@ class KnowledgeItem(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
     task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+
+
+class ProvenanceRecord(Base, TimestampMixin):
+    __tablename__ = "provenance_records"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        CheckConstraint(
+            "subject_type IN ('knowledge', 'decision')",
+            name="ck_provenance_subject_type",
+        ),
+        CheckConstraint(
+            "source_type IN ('url', 'task_run', 'manual', 'inherited')",
+            name="ck_provenance_source_type",
+        ),
+        CheckConstraint(
+            "verification_status IN ('unverified', 'observed', 'verified', 'rejected')",
+            name="ck_provenance_verification_status",
+        ),
+        CheckConstraint(
+            "(subject_type = 'knowledge' AND knowledge_item_id IS NOT NULL "
+            "AND decision_id IS NULL) OR "
+            "(subject_type = 'decision' AND decision_id IS NOT NULL "
+            "AND knowledge_item_id IS NULL)",
+            name="ck_provenance_subject_reference",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    subject_type: Mapped[ProvenanceSubjectType] = mapped_column(String(40), index=True)
+    knowledge_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("knowledge_items.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    decision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("decisions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    task_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    source_record_id: Mapped[str | None] = mapped_column(
+        ForeignKey("provenance_records.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    source_type: Mapped[ProvenanceSourceType] = mapped_column(String(40), index=True)
+    source_uri: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    source_label: Mapped[str] = mapped_column(String(240))
+    claim_reference: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    produced_by_agent: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    verification_status: Mapped[ProvenanceVerificationStatus] = mapped_column(
+        String(40), default=ProvenanceVerificationStatus.UNVERIFIED, index=True
+    )
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    record_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class Approval(Base, TimestampMixin):
