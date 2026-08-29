@@ -402,12 +402,19 @@ class ToolDescriptorRead(BaseModel):
     approval_required: bool
 
 
+class ConnectorActionContractRead(BaseModel):
+    action_type: str
+    schema_id: str
+    version: str
+
+
 class ConnectorDescriptorRead(BaseModel):
     key: str
     version: str
     provider: str
     purpose: str
     action_types: list[str]
+    action_contracts: list[ConnectorActionContractRead]
     risk: str
     side_effects: bool
     approval_required: bool

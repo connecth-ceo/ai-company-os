@@ -20,6 +20,13 @@ def test_connector_catalog_is_read_only_secret_free_and_execution_disabled(clien
         "smartstore_product_publish",
         "smartstore_review_reply",
     ]
+    assert [contract["schema_id"] for contract in smartstore["action_contracts"]] == [
+        "smartstore.campaign.start",
+        "smartstore.price.update",
+        "smartstore.product.publish",
+        "smartstore.review.reply",
+    ]
+    assert {contract["version"] for contract in smartstore["action_contracts"]} == {"v1"}
     for connector in connectors:
         assert connector["side_effects"] is True
         assert connector["approval_required"] is True
@@ -29,6 +36,29 @@ def test_connector_catalog_is_read_only_secret_free_and_execution_disabled(clien
         assert "credential" not in connector
         assert "secret" not in connector
         assert "api_key" not in connector
+
+
+def test_connector_payload_schema_is_read_only_and_forbids_unknown_fields(client):
+    response = client.get(
+        "/api/v1/connector-catalog/smartstore_gateway/actions/smartstore_product_publish/schema"
+    )
+
+    assert response.status_code == 200
+    contract = response.json()
+    assert contract["schema_id"] == "smartstore.product.publish"
+    assert contract["version"] == "v1"
+    schema = contract["json_schema"]
+    assert schema["additionalProperties"] is False
+    assert "legal_review_record_id" in schema["required"]
+    assert "shipping_policy_id" in schema["required"]
+    assert "credential" not in response.text.lower()
+    assert "api_key" not in response.text.lower()
+
+    mismatch = client.get(
+        "/api/v1/connector-catalog/email_gateway/actions/smartstore_product_publish/schema"
+    )
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["code"] == "connector_action_not_allowed"
 
 
 def test_connector_external_execution_fails_closed_without_adapter():

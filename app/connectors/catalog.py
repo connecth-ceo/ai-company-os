@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
+from app.connectors.contracts import payload_contracts_for
+
 
 class ConnectorRisk(StrEnum):
     EXTERNAL_WRITE = "external_write"
@@ -71,6 +73,8 @@ def default_connector_catalog() -> tuple[ConnectorDescriptor, ...]:
 _CATALOG = {item.key: item for item in default_connector_catalog()}
 if len(_CATALOG) != len(default_connector_catalog()):
     raise RuntimeError("Connector catalog keys must be unique")
+for _connector in _CATALOG.values():
+    payload_contracts_for(_connector.action_types)
 
 
 def public_connector_catalog() -> tuple[ConnectorDescriptor, ...]:

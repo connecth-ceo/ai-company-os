@@ -90,6 +90,69 @@ def test_execution_attempt_rejects_unknown_or_mismatched_connector(client):
     assert client.get("/api/v1/execution-attempts").json() == []
 
 
+def test_execution_attempt_rejects_payload_outside_versioned_contract(client):
+    invalid = action_payload(key="execution-ledger-invalid-contract-001")
+    invalid["payload"] = {
+        "channel": "company_blog",
+        "draft_id": "draft-ledger-001",
+        "unexpected_destination": "unapproved-field",
+    }
+    intent = client.post("/api/v1/action-intents", json=invalid).json()
+    approve(client, intent)
+
+    response = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json=preparation_payload(intent, key="execution-attempt-invalid-contract-001"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "connector_payload_invalid"
+    assert "unapproved-field" not in response.text
+    assert client.get("/api/v1/execution-attempts").json() == []
+
+
+def test_smartstore_contract_can_prepare_ledger_but_cannot_execute_external_api(client):
+    intent = client.post(
+        "/api/v1/action-intents",
+        json={
+            "action_type": "smartstore_product_publish",
+            "summary": "검토 완료 상품 게시 준비",
+            "reason": "법률 검토와 자산 참조가 완료된 상품만 원장에 준비",
+            "risk": "critical",
+            "payload": {
+                "merchant_product_id": "merchant-product-001",
+                "product_name": "자동화 검증 상품",
+                "category_id": "cat-500001",
+                "sale_price_krw": 39_900,
+                "stock_quantity": 120,
+                "thumbnail_asset_ids": ["asset-thumb-001", "asset-thumb-002"],
+                "detail_page_asset_id": "asset-detail-001",
+                "legal_review_record_id": "legal-review-001",
+                "shipping_policy_id": "shipping-policy-001",
+            },
+            "expires_in_minutes": 60,
+            "idempotency_key": "smartstore-product-publish-intent-001",
+        },
+    ).json()
+    approve(client, intent)
+
+    prepared = client.post(
+        f"/api/v1/action-intents/{intent['id']}/execution-attempts",
+        json={
+            "expected_payload_hash": intent["payload_hash"],
+            "connector_key": "smartstore_gateway",
+            "idempotency_key": "smartstore-product-publish-attempt-001",
+            "timeout_seconds": 45,
+        },
+    )
+
+    assert prepared.status_code == 201
+    assert prepared.json()["status"] == "prepared"
+    catalog = client.get("/api/v1/connector-catalog").json()
+    smartstore = next(item for item in catalog if item["key"] == "smartstore_gateway")
+    assert smartstore["external_execution_available"] is False
+
+
 def test_execution_attempt_prepare_is_immutable_idempotent_and_side_effect_free(client):
     intent = client.post("/api/v1/action-intents", json=action_payload()).json()
     approve(client, intent)

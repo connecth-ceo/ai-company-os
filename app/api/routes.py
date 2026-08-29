@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agents.tool_gateway import public_tool_catalog
-from app.connectors.catalog import public_connector_catalog
+from app.connectors.catalog import (
+    ConnectorPolicyError,
+    public_connector_catalog,
+    require_connector_action,
+)
+from app.connectors.contracts import payload_contracts_for, public_payload_schema
 from app.core.config import Settings, get_settings
 from app.core.security import TenantContext, get_tenant_context
 from app.db import get_session
@@ -66,6 +71,7 @@ from app.schemas import (
     CommitmentTransition,
     CompanyContextResourceType,
     CompanyContextSearchResponse,
+    ConnectorActionContractRead,
     ConnectorDescriptorRead,
     DecisionCreate,
     DecisionFollowThroughRead,
@@ -412,6 +418,14 @@ async def get_connector_catalog(
             provider=item.provider,
             purpose=item.purpose,
             action_types=list(item.action_types),
+            action_contracts=[
+                ConnectorActionContractRead(
+                    action_type=contract.action_type,
+                    schema_id=contract.schema_id,
+                    version=contract.version,
+                )
+                for contract in payload_contracts_for(item.action_types)
+            ],
             risk=item.risk.value,
             side_effects=item.side_effects,
             approval_required=item.approval_required,
@@ -421,6 +435,23 @@ async def get_connector_catalog(
         )
         for item in public_connector_catalog()
     ]
+
+
+@router.get("/connector-catalog/{connector_key}/actions/{action_type}/schema")
+async def get_connector_payload_schema(
+    connector_key: str,
+    action_type: str,
+    _: TenantContext = Depends(get_tenant_context),
+) -> dict:
+    try:
+        require_connector_action(connector_key, action_type, phase="prepare")
+    except ConnectorPolicyError as exc:
+        status_code = 404 if exc.code == "connector_not_registered" else 409
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": exc.code, "message": exc.detail},
+        ) from exc
+    return public_payload_schema(action_type)
 
 
 @router.get("/attention", response_model=AttentionQueueRead)

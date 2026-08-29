@@ -121,7 +121,7 @@ Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT
 [docs/ACTION_INTENT_COMPLETION_REPORT_KO.md](docs/ACTION_INTENT_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 승인된 외부 행동의 준비·원자적 단일사용 claim 원장은
 [docs/EXECUTION_ATTEMPT_LEDGER_KO.md](docs/EXECUTION_ATTEMPT_LEDGER_KO.md)에 기록되어 있습니다.
-외부 API connector의 action allowlist와 실행 가능 상태 계약은
+외부 API connector의 action allowlist, 버전별 payload JSON Schema와 실행 가능 상태 계약은
 [docs/CONNECTOR_REGISTRY_KO.md](docs/CONNECTOR_REGISTRY_KO.md)에 기록되어 있습니다.
 AI 직원 역할·버전·도구·승인 정책 조회 기준은
 [docs/AI_EMPLOYEE_REGISTRY_KO.md](docs/AI_EMPLOYEE_REGISTRY_KO.md), 구현 범위는

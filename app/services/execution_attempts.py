@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.catalog import ConnectorPolicyError, require_connector_action
+from app.connectors.contracts import ConnectorPayloadError, validate_connector_payload
 from app.core.config import Settings, get_settings
 from app.db import SessionLocal
 from app.models import (
@@ -41,6 +42,13 @@ def _require_connector(
     try:
         require_connector_action(connector_key, action_type, phase=phase)
     except ConnectorPolicyError as exc:
+        raise ExecutionAttemptRejected(exc.code, exc.detail) from exc
+
+
+def _require_connector_payload(action_type: str, payload: dict) -> None:
+    try:
+        validate_connector_payload(action_type, payload)
+    except ConnectorPayloadError as exc:
         raise ExecutionAttemptRejected(exc.code, exc.detail) from exc
 
 
@@ -149,6 +157,7 @@ async def prepare_execution_attempt(
         current=current,
     )
     _require_connector(payload.connector_key, intent.action_type, phase="prepare")
+    _require_connector_payload(intent.action_type, intent.payload)
 
     existing_key = await session.scalar(
         select(ExecutionAttempt).where(
@@ -264,6 +273,7 @@ async def claim_execution_attempt(
             expected_payload_hash=payload.expected_payload_hash,
             current=current,
         )
+        _require_connector_payload(intent.action_type, intent.payload)
     except ExecutionAttemptRejected as exc:
         if exc.code == "intent_expired":
             attempt.status = ExecutionAttemptStatus.FAILED
@@ -363,6 +373,7 @@ async def complete_execution_attempt(
             "intent_not_consumed",
             "Action intent must remain consumed while recording an execution outcome",
         )
+    _require_connector_payload(intent.action_type, intent.payload)
 
     attempt.status = outcome
     attempt.outcome_code = payload.outcome_code
