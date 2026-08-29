@@ -29,6 +29,65 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PortfolioHealthLevel(StrEnum):
+    HEALTHY = "healthy"
+    WATCH = "watch"
+    ACTION = "action"
+    CRITICAL = "critical"
+    CLOSED = "closed"
+
+
+class PortfolioProjectHealthRead(BaseModel):
+    id: str
+    title: str
+    goal_id: str | None
+    status: ProjectStatus
+    health_level: PortfolioHealthLevel
+    health_reason: str
+    total_tasks: int
+    active_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    completion_percent: int
+
+
+class PortfolioGoalHealthRead(BaseModel):
+    id: str
+    title: str
+    status: GoalStatus
+    target_date: date | None
+    days_to_target: int | None
+    health_level: PortfolioHealthLevel
+    health_reason: str
+    total_projects: int
+    open_projects: int
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    completion_percent: int
+
+
+class PortfolioHealthSummaryRead(BaseModel):
+    open_goals: int
+    overdue_goals: int
+    due_soon_goals: int
+    open_projects: int
+    on_hold_projects: int
+    projects_with_failed_tasks: int
+    total_tasks: int
+    completed_tasks: int
+    completion_percent: int
+    health_counts: dict[str, int]
+
+
+class PortfolioHealthRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    summary: PortfolioHealthSummaryRead
+    goals: list[PortfolioGoalHealthRead]
+    projects: list[PortfolioProjectHealthRead]
+
+
 class AttentionItemRead(BaseModel):
     id: str
     level: AttentionLevel
@@ -610,3 +669,4 @@ class AuditEventRead(ORMModel):
     resource_id: str | None
     details: dict
     created_at: datetime
+
