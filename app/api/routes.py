@@ -68,6 +68,7 @@ from app.schemas import (
     KnowledgeRead,
     MemoryCreate,
     MemoryRead,
+    PortfolioHealthRead,
     ProjectCreate,
     ProjectRead,
     ProjectTransition,
@@ -86,6 +87,7 @@ from app.services import (
     company_search,
     decision_memory,
     portfolio,
+    portfolio_health,
 )
 from app.services.ai_costs import (
     get_current_month_cost_summary,
@@ -413,6 +415,19 @@ def portfolio_rejection(error: portfolio.PortfolioLifecycleRejected) -> HTTPExce
     return HTTPException(
         status_code=409,
         detail={"code": error.code, "message": error.detail},
+    )
+
+
+@router.get("/portfolio/health", response_model=PortfolioHealthRead)
+async def get_portfolio_health(
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> PortfolioHealthRead:
+    return await portfolio_health.build_portfolio_health(
+        session,
+        context.tenant_id,
+        item_limit=limit,
     )
 
 
@@ -1304,3 +1319,4 @@ async def list_audit_events(
         .limit(limit)
     )
     return list(await session.scalars(query))
+
