@@ -6,6 +6,7 @@ const state = {
   memories: [],
   decisions: [],
   decisionReadiness: { summary: { readiness_counts: {} }, items: [] },
+  decisionFollowThrough: { summary: { follow_through_counts: {} }, items: [] },
   commitments: [],
   attention: { total: 0, counts: {}, items: [] },
   briefingSchedule: { enabled: false, last_delivery: null },
@@ -73,6 +74,20 @@ const decisionReadinessReasonLabels = {
   expires_soon: "14일 이내 만료",
   review_due_soon: "14일 이내 재검토",
   verified_evidence: "모든 근거 검증 완료",
+};
+
+const decisionFollowThroughLevelLabels = {
+  untracked: "미연결", at_risk: "위험", planned: "계획", in_progress: "진행", complete: "완료", inactive: "비활성",
+};
+
+const decisionFollowThroughReasonLabels = {
+  decision_not_active: "활성 결정 아님",
+  no_commitment: "연결된 후속 약속 없음",
+  overdue_commitment: "기한 초과 후속 약속",
+  cancelled_only: "연결 약속이 모두 취소됨",
+  commitment_in_progress: "후속 약속 진행 중",
+  commitment_planned: "후속 약속 실행 대기",
+  commitments_complete: "후속 약속 완료",
 };
 
 const commitmentStatusLabels = {
@@ -465,6 +480,25 @@ function renderDecisionReadiness() {
   `).join("");
 }
 
+function renderDecisionFollowThrough() {
+  const summary = state.decisionFollowThrough.summary || {};
+  const items = state.decisionFollowThrough.items || [];
+  $("#decision-follow-through-coverage").textContent = `${summary.execution_coverage_percent || 0}%`;
+  $("#decision-follow-through-risk").textContent = summary.at_risk_decisions || 0;
+  $("#decision-follow-through-untracked").textContent = summary.untracked_decisions || 0;
+  if (!items.length) {
+    $("#decision-follow-through-list").innerHTML = '<p class="empty">확인이 필요한 결정 후속조치가 없습니다.</p>';
+    return;
+  }
+  $("#decision-follow-through-list").innerHTML = items.slice(0, 6).map((item) => `
+    <article class="decision-follow-through-item level-${escapeHtml(item.follow_through_level)}">
+      <span class="decision-follow-through-level">${escapeHtml(decisionFollowThroughLevelLabels[item.follow_through_level] || item.follow_through_level)}</span>
+      <strong>${escapeHtml(item.subject)}</strong>
+      <small>${escapeHtml(decisionFollowThroughReasonLabels[item.follow_through_reason] || item.follow_through_reason)} · 약속 ${Number(item.total_commitments || 0)}건</small>
+    </article>
+  `).join("");
+}
+
 function renderProvenance() {
   $("#provenance-count").textContent = state.provenance.length;
   if (!state.provenance.length) {
@@ -539,9 +573,9 @@ function renderContextSearch() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, decisionReadiness, commitments, attention, briefingSchedule, knowledge, provenance, provenanceQuality, goals, projects, portfolioHealth, agents] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, decisionReadiness, decisionFollowThrough, commitments, attention, briefingSchedule, knowledge, provenance, provenanceQuality, goals, projects, portfolioHealth, agents] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
-      api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/decisions/readiness?limit=6"), api("/api/v1/commitments"),
+      api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/decisions/readiness?limit=6"), api("/api/v1/decisions/follow-through?limit=6"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
       api("/api/v1/briefing-schedule"),
       api("/api/v1/knowledge"),
@@ -557,6 +591,7 @@ async function loadDashboard() {
     state.memories = memories;
     state.decisions = decisions;
     state.decisionReadiness = decisionReadiness;
+    state.decisionFollowThrough = decisionFollowThrough;
     state.commitments = commitments;
     state.attention = attention;
     state.briefingSchedule = briefingSchedule;
@@ -567,7 +602,7 @@ async function loadDashboard() {
     state.projects = projects;
     state.portfolioHealth = portfolioHealth;
     state.agents = agents;
-    renderPortfolioHealth(); renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderDecisionReadiness(); renderProvenanceQuality(); renderProvenance(); renderAgents();
+    renderPortfolioHealth(); renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderDecisionReadiness(); renderDecisionFollowThrough(); renderProvenanceQuality(); renderProvenance(); renderAgents();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
