@@ -4,12 +4,14 @@ from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
 from app.models import (
     Approval,
     ApprovalStatus,
     AttentionAcknowledgement,
+    AttentionFollowUp,
     AttentionKind,
     AttentionLevel,
     Commitment,
@@ -81,6 +83,24 @@ def attention_fingerprint(item: AttentionItemRead) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def attention_follow_up_status(follow_up: AttentionFollowUp) -> str:
+    commitment_status = CommitmentStatus(follow_up.commitment.status)
+    task_status = TaskStatus(follow_up.task.status)
+    if commitment_status == CommitmentStatus.COMPLETED:
+        return "completed"
+    if commitment_status == CommitmentStatus.CANCELLED:
+        return "cancelled"
+    if task_status == TaskStatus.FAILED:
+        return "failed"
+    if commitment_status == CommitmentStatus.IN_PROGRESS or task_status in {
+        TaskStatus.DISPATCHED,
+        TaskStatus.RUNNING,
+        TaskStatus.COMPLETED,
+    }:
+        return "in_progress"
+    return "planned"
 
 
 def _decision_detected_at(
@@ -428,6 +448,27 @@ async def build_attention_queue(
     acknowledgement_by_signal = {
         (item.attention_id, item.fingerprint): item for item in acknowledgements
     }
+    follow_ups = []
+    if selected:
+        attention_ids = [item.id for item in selected]
+        follow_ups = list(
+            await session.scalars(
+                select(AttentionFollowUp)
+                .where(
+                    AttentionFollowUp.tenant_id == tenant_id,
+                    AttentionFollowUp.attention_id.in_(attention_ids),
+                )
+                .options(
+                    selectinload(AttentionFollowUp.task),
+                    selectinload(AttentionFollowUp.commitment),
+                )
+                .order_by(AttentionFollowUp.created_at.desc())
+            )
+        )
+    follow_up_by_signal = {(item.attention_id, item.fingerprint): item for item in follow_ups}
+    latest_follow_up_by_attention: dict[str, AttentionFollowUp] = {}
+    for follow_up in follow_ups:
+        latest_follow_up_by_attention.setdefault(follow_up.attention_id, follow_up)
     selected = [
         item.model_copy(
             update={
@@ -435,10 +476,21 @@ async def build_attention_queue(
                 "acknowledgement_id": acknowledgement.id if acknowledgement else None,
                 "acknowledged_at": acknowledgement.created_at if acknowledgement else None,
                 "acknowledged_by": (acknowledgement.acknowledged_by if acknowledgement else None),
+                "follow_up_id": follow_up.id if follow_up else None,
+                "follow_up_task_id": follow_up.task_id if follow_up else None,
+                "follow_up_commitment_id": follow_up.commitment_id if follow_up else None,
+                "follow_up_status": attention_follow_up_status(follow_up) if follow_up else None,
+                "follow_up_matches_current_signal": (
+                    follow_up.fingerprint == item.fingerprint if follow_up else False
+                ),
             }
         )
         for item in selected
         for acknowledgement in [acknowledgement_by_signal.get((item.id, item.fingerprint))]
+        for follow_up in [
+            follow_up_by_signal.get((item.id, item.fingerprint))
+            or latest_follow_up_by_attention.get(item.id)
+        ]
     ]
     acknowledged_total = sum(1 for item in selected if item.acknowledged)
     unacknowledged_total = len(selected) - acknowledged_total

@@ -106,6 +106,10 @@ const attentionKindLabels = {
   decision_governance: "결정 거버넌스",
 };
 
+const attentionFollowUpStatusLabels = {
+  planned: "계획됨", in_progress: "진행 중", completed: "완료", cancelled: "취소", failed: "실패",
+};
+
 const projectStatusLabels = {
   planned: "계획", active: "진행 중", on_hold: "보류", completed: "완료", archived: "보관",
 };
@@ -397,6 +401,9 @@ function renderAttention() {
       <p>${escapeHtml(item.summary)}</p>
       <small>${escapeHtml(item.recommendation)}</small>
       <div class="attention-actions">
+        ${item.follow_up_id
+          ? `<span class="attention-follow-up-state">후속조치 ${escapeHtml(attentionFollowUpStatusLabels[item.follow_up_status] || item.follow_up_status)}${item.follow_up_matches_current_signal ? "" : " · 신호 변경"}</span>`
+          : `<button type="button" class="attention-follow-up-button" data-follow-up-attention-id="${escapeHtml(item.id)}" data-follow-up-fingerprint="${escapeHtml(item.fingerprint)}">후속조치 생성</button>`}
         ${item.acknowledged
           ? `<span>${escapeHtml(item.acknowledged_by || "CEO")} 확인</span>`
           : `<button type="button" data-attention-id="${escapeHtml(item.id)}" data-attention-fingerprint="${escapeHtml(item.fingerprint)}">확인 처리</button>`}
@@ -665,6 +672,29 @@ $("#attention-list").addEventListener("click", async (event) => {
         expected_fingerprint: button.dataset.attentionFingerprint,
         acknowledged_by: "CEO",
         note: "CEO Desk에서 확인",
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#attention-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-follow-up-attention-id]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/attention/${encodeURIComponent(button.dataset.followUpAttentionId)}/follow-ups`, {
+      method: "POST",
+      body: JSON.stringify({
+        expected_fingerprint: button.dataset.followUpFingerprint,
+        owner_type: "agent",
+        owner_id: "chief_of_staff",
+        note: "CEO Desk에서 후속조치 생성",
         idempotency_key: crypto.randomUUID(),
       }),
     });

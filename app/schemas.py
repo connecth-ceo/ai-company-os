@@ -239,6 +239,11 @@ class AttentionItemRead(BaseModel):
     acknowledgement_id: str | None = None
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
+    follow_up_id: str | None = None
+    follow_up_task_id: str | None = None
+    follow_up_commitment_id: str | None = None
+    follow_up_status: str | None = None
+    follow_up_matches_current_signal: bool = False
 
 
 class AttentionQueueRead(BaseModel):
@@ -276,6 +281,44 @@ class AttentionAcknowledgementRead(ORMModel):
     resource_type: str
     resource_id: str
     acknowledged_by: str
+    note: str | None
+    created_at: datetime
+
+
+class AttentionFollowUpCreate(BaseModel):
+    expected_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    owner_type: CommitmentOwnerType = CommitmentOwnerType.AGENT
+    owner_id: str = Field(default="chief_of_staff", min_length=1, max_length=100)
+    due_in_hours: int | None = Field(default=None, ge=1, le=720)
+    task_title: str | None = Field(default=None, min_length=1, max_length=240)
+    task_request: str | None = Field(default=None, min_length=1, max_length=50_000)
+    statement: str | None = Field(default=None, min_length=1, max_length=50_000)
+    note: str | None = Field(default=None, max_length=2_000)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize_optional_text(self) -> "AttentionFollowUpCreate":
+        for field_name in ("task_title", "task_request", "statement", "note"):
+            value = getattr(self, field_name)
+            if value is not None:
+                setattr(self, field_name, value.strip() or None)
+        self.owner_id = self.owner_id.strip()
+        if not self.owner_id:
+            raise ValueError("owner_id must contain visible text")
+        return self
+
+
+class AttentionFollowUpRead(BaseModel):
+    id: str
+    tenant_id: str
+    attention_id: str
+    fingerprint: str
+    task_id: str
+    commitment_id: str
+    task_status: TaskStatus
+    commitment_status: CommitmentStatus
+    status: str
+    created_by: str
     note: str | None
     created_at: datetime
 

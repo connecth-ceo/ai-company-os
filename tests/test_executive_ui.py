@@ -51,7 +51,9 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert "renderDecisionFollowThrough()" in script.text
     assert "data-provenance-review" in script.text
     assert "data-attention-fingerprint" in script.text
+    assert "data-follow-up-fingerprint" in script.text
     assert "/acknowledgements`" in script.text
+    assert "/follow-ups`" in script.text
     assert "/reviews`" in script.text
     assert "/transition`" in script.text
     assert "data-goal-id" in script.text
@@ -69,3 +71,4 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert ".decision-readiness-list" in stylesheet.text
     assert ".decision-follow-through-list" in stylesheet.text
     assert ".attention-actions" in stylesheet.text
+    assert ".attention-follow-up-state" in stylesheet.text

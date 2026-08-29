@@ -50,6 +50,8 @@ from app.schemas import (
     ApprovalRead,
     AttentionAcknowledgementCreate,
     AttentionAcknowledgementRead,
+    AttentionFollowUpCreate,
+    AttentionFollowUpRead,
     AttentionQueueRead,
     AuditEventRead,
     BriefingDeliveryRead,
@@ -97,6 +99,7 @@ from app.services import (
     agent_directory,
     attention,
     attention_acknowledgements,
+    attention_follow_ups,
     commitments,
     company_search,
     decision_follow_through,
@@ -323,6 +326,62 @@ async def acknowledge_attention(
     await session.commit()
     await session.refresh(acknowledgement)
     return acknowledgement
+
+
+def attention_follow_up_rejection(
+    error: attention_follow_ups.AttentionFollowUpRejected,
+) -> HTTPException:
+    status_code = 404 if error.code in {"attention_not_found", "project_not_found"} else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
+@router.get(
+    "/attention/follow-ups",
+    response_model=list[AttentionFollowUpRead],
+)
+async def list_attention_follow_ups(
+    attention_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[AttentionFollowUpRead]:
+    return await attention_follow_ups.list_attention_follow_ups(
+        session,
+        tenant_id=context.tenant_id,
+        attention_id=attention_id,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/attention/{attention_id}/follow-ups",
+    response_model=AttentionFollowUpRead,
+    status_code=201,
+)
+async def create_attention_follow_up(
+    attention_id: str,
+    payload: AttentionFollowUpCreate,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> AttentionFollowUpRead:
+    try:
+        follow_up = await attention_follow_ups.create_attention_follow_up(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            attention_id=attention_id,
+            payload=payload,
+            settings=settings,
+        )
+    except attention_follow_ups.AttentionFollowUpRejected as exc:
+        await session.rollback()
+        raise attention_follow_up_rejection(exc) from exc
+    await session.commit()
+    return follow_up
 
 
 @router.get("/briefing-deliveries", response_model=list[BriefingDeliveryRead])

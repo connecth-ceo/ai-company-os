@@ -84,8 +84,10 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .attention-item strong { display: block; font-size: 14px; }
 .attention-item p { margin: 6px 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
 .attention-item small { display: block; color: var(--muted); line-height: 1.45; }
-.attention-actions { display: flex; justify-content: flex-end; margin-top: 11px; color: var(--muted); font-size: 11px; }
+.attention-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 11px; }
 .attention-actions button { border: 1px solid var(--forest); border-radius: 8px; padding: 7px 10px; background: transparent; color: var(--forest); font-size: 11px; font-weight: 800; }
+.attention-actions .attention-follow-up-button { background: var(--forest); color: white; }
+.attention-follow-up-state { border-radius: 999px; padding: 4px 8px; background: #dff2d9; color: #25603f; font-weight: 800; }
 .attention-actions button:disabled { cursor: wait; opacity: .5; }
 .portfolio-health { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin: 0 0 14px; }
 .portfolio-health > .empty { grid-column: 1 / -1; }

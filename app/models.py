@@ -659,6 +659,37 @@ class AttentionAcknowledgement(Base, TimestampMixin):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class AttentionFollowUp(Base, TimestampMixin):
+    __tablename__ = "attention_follow_ups"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        UniqueConstraint(
+            "tenant_id",
+            "attention_id",
+            "fingerprint",
+            name="uq_attention_follow_ups_signal",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    attention_id: Mapped[str] = mapped_column(String(160), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    task_id: Mapped[str] = mapped_column(
+        ForeignKey("tasks.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    commitment_id: Mapped[str] = mapped_column(
+        ForeignKey("commitments.id", ondelete="RESTRICT"), unique=True, index=True
+    )
+    created_by: Mapped[str] = mapped_column(String(100))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    task: Mapped[Task] = relationship(foreign_keys=[task_id])
+    commitment: Mapped[Commitment] = relationship(foreign_keys=[commitment_id])
+
+
 class Approval(Base, TimestampMixin):
     __tablename__ = "approvals"
 

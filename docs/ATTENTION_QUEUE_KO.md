@@ -41,6 +41,25 @@ Attention Queue는 대표가 지금 확인해야 할 예외를 기존 운영 데
 `expected_fingerprint`, `acknowledged_by`, 선택 메모, `idempotency_key`가 필요합니다. 오래된 화면의 지문은
 409로 거절하며, 이력은 `GET /api/v1/attention/acknowledgements`에서 회사별로 조회합니다.
 
+## 후속조치 폐루프
+
+`POST /api/v1/attention/{attention_id}/follow-ups`는 현재 지문을 다시 확인한 뒤 다음 데이터를 하나의
+트랜잭션으로 생성합니다.
+
+- 실행되지 않은 `queued` Task
+- Task와 연결된 담당자·마감일 Commitment
+- 주의 ID와 당시 지문을 보존하는 `attention_follow_ups` 연결 원장
+- 확인 이력과 Task·Commitment·follow-up 감사 이벤트
+
+기본 담당자는 `chief_of_staff` agent입니다. 마감은 `critical` 4시간, `decision` 12시간,
+`action` 24시간, `watch` 72시간, `info` 168시간 뒤이며 요청에서 제한된 범위로 변경할 수 있습니다.
+생성된 Task는 자동 실행하지 않으므로 AI 비용이나 외부 행동이 발생하지 않습니다. 이력은
+`GET /api/v1/attention/follow-ups`로 조회합니다.
+
+후속 Commitment 생성 때문에 결정 거버넌스 신호의 근거가 바뀌면 기존 지문 확인은 보존되고 새 지문은
+다시 미확인으로 나타납니다. CEO Desk는 같은 attention ID의 최신 후속조치를 계속 표시하면서 `신호 변경`
+표시로 재검토 필요를 구분합니다.
+
 ## CEO Desk와 Telegram
 
 CEO Desk의 **대표 주의 큐**는 최대 8건을 표시하고 미확인 `decision`과 `critical` 건수를 상단 지표에
@@ -55,6 +74,7 @@ OpenAI 비용이 없습니다.
 - 회사 ID가 같은 원본만 조회하므로 다른 회사의 상태가 섞이지 않습니다.
 - 확인 처리는 원본 Task, Approval, Commitment, Decision 상태를 바꾸거나 해결된 것으로 간주하지 않습니다.
 - 확인 기록은 append-only이며, 동일 요청 재전송은 멱등 처리하고 오래된 지문은 거절합니다.
+- 후속조치 생성은 내부 Task·Commitment만 만들며 TaskRun, AI 호출, 외부 도구 실행을 시작하지 않습니다.
 
 ## 운영 점검
 
