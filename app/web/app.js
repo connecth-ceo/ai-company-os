@@ -77,6 +77,33 @@ const goalStatusLabels = {
   cancelled: "취소", archived: "보관",
 };
 
+const goalTransitionOptions = {
+  planned: [["active", "시작"], ["cancelled", "취소"]],
+  active: [["on_hold", "보류"], ["achieved", "달성"], ["cancelled", "취소"]],
+  on_hold: [["active", "재개"], ["cancelled", "취소"]],
+  achieved: [["archived", "보관"]],
+  cancelled: [["archived", "보관"]],
+  archived: [],
+};
+
+const projectTransitionOptions = {
+  planned: [["active", "시작"], ["archived", "보관"]],
+  active: [["on_hold", "보류"], ["completed", "완료"]],
+  on_hold: [["active", "재개"], ["archived", "보관"]],
+  completed: [["archived", "보관"]],
+  archived: [],
+};
+
+function portfolioActions(kind, id, currentStatus) {
+  const options = kind === "goal"
+    ? goalTransitionOptions[currentStatus] || []
+    : projectTransitionOptions[currentStatus] || [];
+  if (!options.length) return "";
+  return `<div class="portfolio-actions">${options.map(([status, label]) => (
+    `<button type="button" data-${kind}-id="${escapeHtml(id)}" data-status="${escapeHtml(status)}">${escapeHtml(label)}</button>`
+  )).join("")}</div>`;
+}
+
 const evaluationStatusLabels = {
   untested: "미평가", baseline: "기준 검증", pilot: "파일럿", approved: "운영 승인",
 };
@@ -169,6 +196,7 @@ function renderProjects() {
           <span class="project-stat">진행 ${active}</span>
           <span class="project-stat">완료 ${completed}</span>
         </div>
+        ${portfolioActions("project", project.id, project.status)}
       </article>`;
   }).join("");
 }
@@ -210,6 +238,7 @@ function renderGoals() {
           <span class="project-stat">프로젝트 ${projects.length}</span>
           <span class="project-stat">완료 업무 ${completed}/${tasks.length}</span>
         </div>
+        ${portfolioActions("goal", goal.id, goal.status)}
       </article>`;
   }).join("");
 }
@@ -409,6 +438,32 @@ $("#approval-list").addEventListener("click", async (event) => {
 $("#refresh-button").addEventListener("click", loadDashboard);
 $("#add-goal-button").addEventListener("click", () => $("#goal-dialog").showModal());
 $("#add-project-button").addEventListener("click", () => $("#project-dialog").showModal());
+async function handlePortfolioTransition(button, kind) {
+  const id = button.dataset[`${kind}Id`];
+  const target = button.dataset.status;
+  const terminal = ["achieved", "cancelled", "completed", "archived"].includes(target);
+  if (terminal && !window.confirm(`상태를 '${kind === "goal" ? goalStatusLabels[target] : projectStatusLabels[target]}'(으)로 변경할까요?`)) return;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/${kind}s/${id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ status: target, note: "CEO Desk 상태 변경" }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+$("#goal-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-goal-id]");
+  if (button) await handlePortfolioTransition(button, "goal");
+});
+$("#project-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-project-id]");
+  if (button) await handlePortfolioTransition(button, "project");
+});
 $("#add-commitment-button").addEventListener("click", () => {
   const availableDecisions = state.decisions.filter((item) => ["proposed", "active"].includes(item.status));
   $("#commitment-decision-id").innerHTML = '<option value="">연결하지 않음</option>'

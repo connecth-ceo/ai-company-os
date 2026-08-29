@@ -93,6 +93,10 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .project-goal { display: inline-block; margin-top: 7px; color: var(--forest); font-size: 11px; font-weight: 800; }
 .project-stats { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
 .project-stat, .agent-chip { border-radius: 999px; padding: 4px 8px; background: #eef0e9; color: var(--forest); font-size: 10px; font-weight: 800; }
+.portfolio-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.portfolio-actions button { border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; background: var(--surface); color: var(--forest); font-size: 11px; font-weight: 750; }
+.portfolio-actions button:hover { border-color: var(--forest); }
+.portfolio-actions button:disabled { cursor: wait; opacity: .55; }
 .project-status { border-radius: 999px; padding: 4px 8px; background: #e7e6df; color: var(--muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
 .project-status.active { background: #dff2d9; color: #25603f; }
 .project-status.planned { background: #e8f1f5; color: #24546a; }

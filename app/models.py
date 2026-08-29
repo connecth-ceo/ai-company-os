@@ -35,6 +35,23 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class GoalStatus(StrEnum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    ON_HOLD = "on_hold"
+    ACHIEVED = "achieved"
+    CANCELLED = "cancelled"
+    ARCHIVED = "archived"
+
+
+class ProjectStatus(StrEnum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    ON_HOLD = "on_hold"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+
+
 class ApprovalStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -133,7 +150,7 @@ class Goal(Base, TimestampMixin):
     success_metric: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner: Mapped[str | None] = mapped_column(String(160), nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+    status: Mapped[str] = mapped_column(String(40), default=GoalStatus.ACTIVE, index=True)
 
     projects: Mapped[list["Project"]] = relationship(back_populates="goal")
 
@@ -145,7 +162,7 @@ class Project(Base, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
     title: Mapped[str] = mapped_column(String(240))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+    status: Mapped[str] = mapped_column(String(40), default=ProjectStatus.ACTIVE, index=True)
     goal_id: Mapped[str | None] = mapped_column(
         ForeignKey("goals.id", ondelete="RESTRICT"), nullable=True, index=True
     )

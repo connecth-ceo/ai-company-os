@@ -63,12 +63,14 @@ from app.schemas import (
     DispatchResponse,
     GoalCreate,
     GoalRead,
+    GoalTransition,
     KnowledgeCreate,
     KnowledgeRead,
     MemoryCreate,
     MemoryRead,
     ProjectCreate,
     ProjectRead,
+    ProjectTransition,
     TaskCreate,
     TaskDetail,
     TaskRead,
@@ -83,6 +85,7 @@ from app.services import (
     commitments,
     company_search,
     decision_memory,
+    portfolio,
 )
 from app.services.ai_costs import (
     get_current_month_cost_summary,
@@ -326,16 +329,32 @@ async def require_task(session: AsyncSession, task_id: str, tenant_id: str) -> T
     return task
 
 
-async def require_project(session: AsyncSession, project_id: str, tenant_id: str) -> Project:
+async def require_project(
+    session: AsyncSession,
+    project_id: str,
+    tenant_id: str,
+    *,
+    for_update: bool = False,
+) -> Project:
     query = select(Project).where(Project.id == project_id, Project.tenant_id == tenant_id)
+    if for_update:
+        query = query.with_for_update()
     project = (await session.scalars(query)).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
 
-async def require_goal(session: AsyncSession, goal_id: str, tenant_id: str) -> Goal:
+async def require_goal(
+    session: AsyncSession,
+    goal_id: str,
+    tenant_id: str,
+    *,
+    for_update: bool = False,
+) -> Goal:
     query = select(Goal).where(Goal.id == goal_id, Goal.tenant_id == tenant_id)
+    if for_update:
+        query = query.with_for_update()
     goal = (await session.scalars(query)).first()
     if goal is None:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -390,6 +409,13 @@ def commitment_rejection(
     )
 
 
+def portfolio_rejection(error: portfolio.PortfolioLifecycleRejected) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
 @router.post("/goals", response_model=GoalRead, status_code=status.HTTP_201_CREATED)
 async def create_goal(
     payload: GoalCreate,
@@ -436,6 +462,29 @@ async def get_goal(
     return await require_goal(session, goal_id, context.tenant_id)
 
 
+@router.post("/goals/{goal_id}/transition", response_model=GoalRead)
+async def transition_goal(
+    goal_id: str,
+    payload: GoalTransition,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Goal:
+    goal = await require_goal(session, goal_id, context.tenant_id, for_update=True)
+    try:
+        await portfolio.transition_goal(
+            session,
+            item=goal,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except portfolio.PortfolioLifecycleRejected as exc:
+        raise portfolio_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(goal)
+    return goal
+
+
 @router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: ProjectCreate,
@@ -443,7 +492,16 @@ async def create_project(
     context: TenantContext = Depends(get_tenant_context),
 ) -> Project:
     if payload.goal_id:
-        await require_goal(session, payload.goal_id, context.tenant_id)
+        goal = await require_goal(
+            session,
+            payload.goal_id,
+            context.tenant_id,
+            for_update=True,
+        )
+        try:
+            portfolio.ensure_goal_accepts_projects(goal)
+        except portfolio.PortfolioLifecycleRejected as exc:
+            raise portfolio_rejection(exc) from exc
     project = Project(tenant_id=context.tenant_id, **payload.model_dump())
     session.add(project)
     await session.flush()
@@ -485,6 +543,29 @@ async def get_project(
     return await require_project(session, project_id, context.tenant_id)
 
 
+@router.post("/projects/{project_id}/transition", response_model=ProjectRead)
+async def transition_project(
+    project_id: str,
+    payload: ProjectTransition,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Project:
+    project = await require_project(session, project_id, context.tenant_id, for_update=True)
+    try:
+        await portfolio.transition_project(
+            session,
+            item=project,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            payload=payload,
+        )
+    except portfolio.PortfolioLifecycleRejected as exc:
+        raise portfolio_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
 @router.post("/tasks", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(
     payload: TaskCreate,
@@ -500,7 +581,16 @@ async def create_task(
         if existing:
             return existing
     if payload.project_id:
-        await require_project(session, payload.project_id, context.tenant_id)
+        project = await require_project(
+            session,
+            payload.project_id,
+            context.tenant_id,
+            for_update=True,
+        )
+        try:
+            portfolio.ensure_project_accepts_tasks(project)
+        except portfolio.PortfolioLifecycleRejected as exc:
+            raise portfolio_rejection(exc) from exc
     if payload.parent_task_id:
         parent = await require_task(session, payload.parent_task_id, context.tenant_id)
         if payload.project_id and parent.project_id != payload.project_id:

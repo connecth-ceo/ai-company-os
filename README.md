@@ -16,7 +16,7 @@
 - 중앙 Tool Gateway를 통한 읽기 전용 웹 검색 권한 검증과 감사 메타데이터
 - 외부 행동 payload hash·만료·단일사용 범위를 고정하는 제안 전용 ActionIntent
 - 프롬프트·비밀값을 제외한 읽기 전용 AI Employee Registry
-- Goal → Project → Task 전략 계층과 AI 직원 권한을 한 화면에 보여주는 Executive UI
+- Goal → Project → Task 전략 계층, 제한된 상태 전이와 AI 직원 권한을 보여주는 Executive UI
 - Docker Compose 로컬/배포 기준 구성
 - API 키 인증, 회사별 데이터 격리, 중복 요청 방지
 - 실행 재시도·시간 제한·토큰 사용량·감사 이벤트
@@ -72,7 +72,8 @@ Phase 1의 Runtime·AgentDefinition·Registry 구조는
 전문 기능의 사용법과 안전 경계는
 [docs/SPECIALIST_FEATURES_KO.md](docs/SPECIALIST_FEATURES_KO.md)에 있습니다.
 JARVIS형 확장 분석은 [JARVIS_AI_COMPANY_OS_GAP_ANALYSIS.md](JARVIS_AI_COMPANY_OS_GAP_ANALYSIS.md),
-Goal/Project/Task 전략 계층은 [docs/GOAL_PROJECT_HIERARCHY_KO.md](docs/GOAL_PROJECT_HIERARCHY_KO.md),
+Goal/Project/Task 전략 계층과 상태 전이는 [docs/GOAL_PROJECT_HIERARCHY_KO.md](docs/GOAL_PROJECT_HIERARCHY_KO.md),
+구현·검증 결과는 [docs/PORTFOLIO_LIFECYCLE_COMPLETION_REPORT_KO.md](docs/PORTFOLIO_LIFECYCLE_COMPLETION_REPORT_KO.md),
 Project/상·하위 Task API는 [docs/PROJECT_TASK_HIERARCHY_KO.md](docs/PROJECT_TASK_HIERARCHY_KO.md)에
 설명되어 있습니다. 기존 고정 실행의 버전·계획·결과 기록 구조는
 [docs/WORKFLOW_RECORDING_LAYER_KO.md](docs/WORKFLOW_RECORDING_LAYER_KO.md)에 있습니다.

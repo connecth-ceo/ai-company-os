@@ -139,6 +139,24 @@ def test_delegation_is_tenant_isolated(client):
     )
 
 
+def test_delegation_rejects_a_completed_project(client):
+    project = client.post("/api/v1/projects", json={"title": "Closed project"}).json()
+    parent = create_task(client, project_id=project["id"], title="Completed parent")
+    assert client.post(f"/api/v1/tasks/{parent['id']}/run").status_code == 202
+    assert (
+        client.post(
+            f"/api/v1/projects/{project['id']}/transition",
+            json={"status": "completed"},
+        ).status_code
+        == 200
+    )
+
+    blocked = delegate(client, parent["id"])
+
+    assert blocked.status_code == 409
+    assert "completed or archived project" in blocked.json()["detail"]
+
+
 @pytest.mark.asyncio
 async def test_existing_cycle_is_detected_before_creating_child():
     async with SessionLocal() as session:

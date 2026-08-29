@@ -18,6 +18,8 @@ from app.models import (
     CommitmentStatus,
     DecisionScope,
     DecisionStatus,
+    GoalStatus,
+    ProjectStatus,
     ReviewVerdict,
     TaskStatus,
 )
@@ -112,10 +114,19 @@ class GoalCreate(BaseModel):
     success_metric: str | None = Field(default=None, max_length=2_000)
     owner: str | None = Field(default=None, max_length=160)
     target_date: date | None = None
-    status: str = Field(
-        default="active",
-        pattern="^(planned|active|on_hold|achieved|cancelled|archived)$",
-    )
+    status: GoalStatus = GoalStatus.ACTIVE
+
+    @field_validator("status")
+    @classmethod
+    def validate_initial_status(cls, value: GoalStatus) -> GoalStatus:
+        if value not in {GoalStatus.PLANNED, GoalStatus.ACTIVE, GoalStatus.ON_HOLD}:
+            raise ValueError("A goal can only be created as planned, active, or on_hold")
+        return value
+
+
+class GoalTransition(BaseModel):
+    status: GoalStatus
+    note: str | None = Field(default=None, max_length=2_000)
 
 
 class GoalRead(ORMModel):
@@ -126,7 +137,7 @@ class GoalRead(ORMModel):
     success_metric: str | None
     owner: str | None
     target_date: date | None
-    status: str
+    status: GoalStatus
     created_at: datetime
     updated_at: datetime
 
@@ -134,11 +145,20 @@ class GoalRead(ORMModel):
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=50_000)
-    status: str = Field(
-        default="active",
-        pattern="^(planned|active|on_hold|completed|archived)$",
-    )
+    status: ProjectStatus = ProjectStatus.ACTIVE
     goal_id: str | None = Field(default=None, max_length=36)
+
+    @field_validator("status")
+    @classmethod
+    def validate_initial_status(cls, value: ProjectStatus) -> ProjectStatus:
+        if value not in {ProjectStatus.PLANNED, ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD}:
+            raise ValueError("A project can only be created as planned, active, or on_hold")
+        return value
+
+
+class ProjectTransition(BaseModel):
+    status: ProjectStatus
+    note: str | None = Field(default=None, max_length=2_000)
 
 
 class ProjectRead(ORMModel):
@@ -146,7 +166,7 @@ class ProjectRead(ORMModel):
     tenant_id: str
     title: str
     description: str | None
-    status: str
+    status: ProjectStatus
     goal_id: str | None
     created_at: datetime
     updated_at: datetime

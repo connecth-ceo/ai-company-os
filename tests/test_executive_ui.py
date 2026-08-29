@@ -30,7 +30,11 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert "renderGoals()" in script.text
     assert "renderProjects()" in script.text
     assert "renderAgents()" in script.text
+    assert "/transition`" in script.text
+    assert "data-goal-id" in script.text
+    assert "data-project-id" in script.text
     assert ".executive-grid" in stylesheet.text
     assert ".goal-card" in stylesheet.text
     assert ".agent-card" in stylesheet.text
     assert ".context-search-form" in stylesheet.text
+    assert ".portfolio-actions" in stylesheet.text

@@ -7,7 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.operational_registry import build_operational_agent_registry
 from app.agents.registry import UnknownAgentError
 from app.core.config import Settings
-from app.models import Approval, ApprovalStatus, Delegation, Task, TaskStatus
+from app.models import (
+    Approval,
+    ApprovalStatus,
+    Delegation,
+    Project,
+    ProjectStatus,
+    Task,
+    TaskStatus,
+)
 from app.schemas import DelegatedTaskCreate
 from app.services.ai_costs import estimate_max_cost_usd, require_model_pricing
 
@@ -84,6 +92,21 @@ async def create_delegation(
         raise DelegationRejected(
             "parent_running", "A running or dispatched task cannot create new delegations"
         )
+
+    if parent.project_id:
+        project_status = await session.scalar(
+            select(Project.status)
+            .where(
+                Project.id == parent.project_id,
+                Project.tenant_id == parent.tenant_id,
+            )
+            .with_for_update()
+        )
+        if project_status in {ProjectStatus.COMPLETED, ProjectStatus.ARCHIVED}:
+            raise DelegationRejected(
+                "project_closed",
+                "A completed or archived project cannot receive delegated tasks",
+            )
 
     pending_approvals = await session.scalar(
         select(func.count(Approval.id)).where(
