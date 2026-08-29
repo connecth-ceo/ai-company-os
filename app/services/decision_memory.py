@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Decision, DecisionScope, DecisionStatus, Project, Task
 from app.schemas import DecisionCreate, DecisionTransition
 from app.services.audit import add_audit_event
+from app.services.provenance import capture_decision_provenance
 
 
 class DecisionLifecycleRejected(ValueError):
@@ -189,6 +190,12 @@ async def create_decision(
             "scope": item.scope.value,
             "supersedes_decision_id": item.supersedes_decision_id,
         },
+    )
+    await capture_decision_provenance(
+        session,
+        tenant_id=tenant_id,
+        decision=item,
+        actor=actor,
     )
     return item
 

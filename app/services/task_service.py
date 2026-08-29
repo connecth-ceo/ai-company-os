@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.models import Approval, KnowledgeItem, Task, TaskRun, TaskStatus, WorkflowRun
 from app.services.audit import add_audit_event
 from app.services.company_context import build_company_context
+from app.services.provenance import capture_research_provenance
 from app.workflows.catalog import (
     build_execution_plan,
     ensure_workflow_definitions,
@@ -168,23 +169,30 @@ async def execute_task(
             "completed_steps": [step["key"] for step in execution_plan["steps"]],
         }
         workflow_run.finished_at = run.finished_at
-        existing_knowledge = await session.scalar(
-            select(KnowledgeItem.id).where(
+        knowledge_item = await session.scalar(
+            select(KnowledgeItem).where(
                 KnowledgeItem.tenant_id == task.tenant_id,
                 KnowledgeItem.task_id == task.id,
                 KnowledgeItem.source == "Research Agent",
             )
         )
-        if existing_knowledge is None:
-            session.add(
-                KnowledgeItem(
-                    tenant_id=task.tenant_id,
-                    title=f"Research: {task.title}",
-                    content=outcome.research,
-                    source="Research Agent",
-                    task_id=task.id,
-                )
+        if knowledge_item is None:
+            knowledge_item = KnowledgeItem(
+                tenant_id=task.tenant_id,
+                title=f"Research: {task.title}",
+                content=outcome.research,
+                source="Research Agent",
+                task_id=task.id,
             )
+            session.add(knowledge_item)
+            await session.flush()
+        await capture_research_provenance(
+            session,
+            tenant_id=task.tenant_id,
+            knowledge_item=knowledge_item,
+            task_run=run,
+            content=outcome.research,
+        )
 
         existing_approval_actions = set(
             await session.scalars(
