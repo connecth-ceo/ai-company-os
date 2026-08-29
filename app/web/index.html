@@ -85,10 +85,15 @@
       <section class="executive-grid">
         <article class="panel projects-panel">
           <div class="panel-heading">
-            <div><p class="eyebrow">PROJECT PORTFOLIO</p><h2>프로젝트</h2></div>
-            <button class="primary-button compact-button" id="add-project-button">새 프로젝트</button>
+            <div><p class="eyebrow">GOAL PORTFOLIO</p><h2>목표와 프로젝트</h2></div>
+            <div class="panel-actions">
+              <button class="text-button" id="add-goal-button">새 목표</button>
+              <button class="primary-button compact-button" id="add-project-button">새 프로젝트</button>
+            </div>
           </div>
-          <p class="panel-note">대표 목표를 프로젝트로 묶고, 새 업무를 선택한 프로젝트에 연결합니다.</p>
+          <p class="panel-note">회사 목표를 프로젝트로 나누고, 새 업무를 선택한 프로젝트에 연결합니다.</p>
+          <div id="goal-list" class="goal-list"><p class="empty">등록된 목표가 없습니다.</p></div>
+          <h3 class="portfolio-subheading">프로젝트</h3>
           <div id="project-list" class="project-list"><p class="empty">등록된 프로젝트가 없습니다.</p></div>
         </article>
 
@@ -155,6 +160,29 @@
       </section>
     </main>
 
+    <dialog id="goal-dialog">
+      <form id="goal-form">
+        <div class="panel-heading"><h2>새 목표</h2><button type="button" class="close-button" data-close-dialog="goal-dialog" aria-label="닫기">×</button></div>
+        <label for="goal-title">목표 이름</label>
+        <input id="goal-title" required maxlength="240" placeholder="예: 2026년 유료 고객 20곳 확보" />
+        <label for="goal-description">목표 설명</label>
+        <textarea id="goal-description" rows="3" maxlength="50000" placeholder="달성하려는 결과와 이유를 적습니다."></textarea>
+        <label for="goal-success-metric">성공 기준</label>
+        <textarea id="goal-success-metric" rows="2" maxlength="2000" placeholder="예: 월 반복매출 2천만원, 유료 고객 20곳"></textarea>
+        <label for="goal-owner">책임자</label>
+        <input id="goal-owner" maxlength="160" placeholder="예: CEO" />
+        <label for="goal-target-date">목표일</label>
+        <input id="goal-target-date" type="date" />
+        <label for="goal-status">시작 상태</label>
+        <select id="goal-status">
+          <option value="active">진행 중</option>
+          <option value="planned">계획</option>
+          <option value="on_hold">보류</option>
+        </select>
+        <p class="form-status" id="goal-form-status" aria-live="polite"></p>
+        <button class="primary-button" type="submit">목표 저장</button>
+      </form>
+    </dialog>
     <dialog id="project-dialog">
       <form id="project-form">
         <div class="panel-heading"><h2>새 프로젝트</h2><button type="button" class="close-button" data-close-dialog="project-dialog" aria-label="닫기">×</button></div>
@@ -162,6 +190,8 @@
         <input id="project-title" required maxlength="240" placeholder="예: 첫 유료 고객 확보" />
         <label for="project-description">목표와 범위</label>
         <textarea id="project-description" rows="4" maxlength="50000" placeholder="예: 4주 안에 인터뷰, 제안, 계약까지 검증한다."></textarea>
+        <label for="project-goal-id">상위 목표</label>
+        <select id="project-goal-id"><option value="">목표 미지정</option></select>
         <label for="project-status">시작 상태</label>
         <select id="project-status">
           <option value="active">진행 중</option>

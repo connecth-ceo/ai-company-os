@@ -106,6 +106,31 @@ class AgentDirectoryEntryRead(BaseModel):
     structured_output: bool
 
 
+class GoalCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=240)
+    description: str | None = Field(default=None, max_length=50_000)
+    success_metric: str | None = Field(default=None, max_length=2_000)
+    owner: str | None = Field(default=None, max_length=160)
+    target_date: date | None = None
+    status: str = Field(
+        default="active",
+        pattern="^(planned|active|on_hold|achieved|cancelled|archived)$",
+    )
+
+
+class GoalRead(ORMModel):
+    id: str
+    tenant_id: str
+    title: str
+    description: str | None
+    success_metric: str | None
+    owner: str | None
+    target_date: date | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=50_000)
@@ -113,6 +138,7 @@ class ProjectCreate(BaseModel):
         default="active",
         pattern="^(planned|active|on_hold|completed|archived)$",
     )
+    goal_id: str | None = Field(default=None, max_length=36)
 
 
 class ProjectRead(ORMModel):
@@ -121,6 +147,7 @@ class ProjectRead(ORMModel):
     title: str
     description: str | None
     status: str
+    goal_id: str | None
     created_at: datetime
     updated_at: datetime
 

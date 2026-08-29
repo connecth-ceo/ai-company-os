@@ -82,17 +82,25 @@ select { border: 1px solid var(--line); background: transparent; border-radius: 
 .attention-item strong { display: block; font-size: 14px; }
 .attention-item p { margin: 6px 0; color: var(--ink); font-size: 13px; line-height: 1.45; }
 .attention-item small { display: block; color: var(--muted); line-height: 1.45; }
-.project-list, .agent-list { display: grid; gap: 10px; }
-.project-card, .agent-card { border: 1px solid var(--line); border-radius: 13px; padding: 15px 16px; min-width: 0; }
+.goal-list, .project-list, .agent-list { display: grid; gap: 10px; }
+.goal-card, .project-card, .agent-card { border: 1px solid var(--line); border-radius: 13px; padding: 15px 16px; min-width: 0; }
+.goal-card { border-left: 4px solid var(--lime); background: #fafbf7; }
 .project-heading, .agent-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.project-card strong, .agent-card strong { display: block; font-size: 14px; }
-.project-card p, .agent-card p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.goal-card strong, .project-card strong, .agent-card strong { display: block; font-size: 14px; }
+.goal-card p, .project-card p, .agent-card p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.goal-metric { margin-top: 9px; color: var(--forest); font-size: 12px; font-weight: 750; }
+.portfolio-subheading { margin: 18px 0 10px; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.project-goal { display: inline-block; margin-top: 7px; color: var(--forest); font-size: 11px; font-weight: 800; }
 .project-stats { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
 .project-stat, .agent-chip { border-radius: 999px; padding: 4px 8px; background: #eef0e9; color: var(--forest); font-size: 10px; font-weight: 800; }
 .project-status { border-radius: 999px; padding: 4px 8px; background: #e7e6df; color: var(--muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
 .project-status.active { background: #dff2d9; color: #25603f; }
 .project-status.planned { background: #e8f1f5; color: #24546a; }
 .project-status.on_hold { background: #fff1c8; color: #795b00; }
+.goal-status { border-radius: 999px; padding: 4px 8px; background: #e7e6df; color: var(--muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.goal-status.active, .goal-status.achieved { background: #dff2d9; color: #25603f; }
+.goal-status.planned { background: #e8f1f5; color: #24546a; }
+.goal-status.on_hold { background: #fff1c8; color: #795b00; }
 .agent-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .agent-role { color: var(--forest); font-weight: 800; font-size: 11px; letter-spacing: .04em; }
 .agent-boundaries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }

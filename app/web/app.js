@@ -9,6 +9,7 @@ const state = {
   attention: { total: 0, counts: {}, items: [] },
   briefingSchedule: { enabled: false, last_delivery: null },
   knowledge: [],
+  goals: [],
   projects: [],
   agents: [],
   contextSearch: { query: "", total: 0, items: [] },
@@ -71,6 +72,11 @@ const projectStatusLabels = {
   planned: "계획", active: "진행 중", on_hold: "보류", completed: "완료", archived: "보관",
 };
 
+const goalStatusLabels = {
+  planned: "계획", active: "진행 중", on_hold: "보류", achieved: "달성",
+  cancelled: "취소", archived: "보관",
+};
+
 const evaluationStatusLabels = {
   untested: "미평가", baseline: "기준 검증", pilot: "파일럿", approved: "운영 승인",
 };
@@ -81,6 +87,10 @@ const contextResourceLabels = {
 
 function projectTitle(projectId) {
   return state.projects.find((project) => project.id === projectId)?.title || "";
+}
+
+function goalTitle(goalId) {
+  return state.goals.find((goal) => goal.id === goalId)?.title || "";
 }
 
 function renderTasks() {
@@ -152,11 +162,53 @@ function renderProjects() {
           <strong>${escapeHtml(project.title)}</strong>
           <span class="project-status ${escapeHtml(project.status)}">${escapeHtml(projectStatusLabels[project.status] || project.status)}</span>
         </div>
+        ${project.goal_id ? `<span class="project-goal">목표 · ${escapeHtml(goalTitle(project.goal_id) || "연결됨")}</span>` : ""}
         ${project.description ? `<p>${escapeHtml(project.description)}</p>` : ""}
         <div class="project-stats">
           <span class="project-stat">전체 업무 ${tasks.length}</span>
           <span class="project-stat">진행 ${active}</span>
           <span class="project-stat">완료 ${completed}</span>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+function renderGoals() {
+  const select = $("#project-goal-id");
+  const selectedGoal = select.value;
+  const selectableGoals = state.goals.filter(
+    (goal) => !["achieved", "cancelled", "archived"].includes(goal.status),
+  );
+  select.innerHTML = '<option value="">목표 미지정</option>' + selectableGoals.map((goal) => (
+    `<option value="${goal.id}">${escapeHtml(goal.title)}</option>`
+  )).join("");
+  if (selectableGoals.some((goal) => goal.id === selectedGoal)) select.value = selectedGoal;
+
+  if (!state.goals.length) {
+    $("#goal-list").innerHTML = '<p class="empty">첫 회사 목표를 등록해 프로젝트의 방향을 정해보세요.</p>';
+    return;
+  }
+  $("#goal-list").innerHTML = state.goals.slice(0, 6).map((goal) => {
+    const projects = state.projects.filter((project) => project.goal_id === goal.id);
+    const projectIds = new Set(projects.map((project) => project.id));
+    const tasks = state.tasks.filter((task) => projectIds.has(task.project_id));
+    const completed = tasks.filter((task) => task.status === "completed").length;
+    const target = goal.target_date
+      ? new Date(`${goal.target_date}T00:00:00`).toLocaleDateString("ko-KR")
+      : "목표일 미정";
+    return `
+      <article class="goal-card">
+        <div class="project-heading">
+          <strong>${escapeHtml(goal.title)}</strong>
+          <span class="goal-status ${escapeHtml(goal.status)}">${escapeHtml(goalStatusLabels[goal.status] || goal.status)}</span>
+        </div>
+        ${goal.description ? `<p>${escapeHtml(goal.description)}</p>` : ""}
+        ${goal.success_metric ? `<div class="goal-metric">성공 기준 · ${escapeHtml(goal.success_metric)}</div>` : ""}
+        <div class="project-stats">
+          <span class="project-stat">${escapeHtml(goal.owner || "책임자 미정")}</span>
+          <span class="project-stat">${escapeHtml(target)}</span>
+          <span class="project-stat">프로젝트 ${projects.length}</span>
+          <span class="project-stat">완료 업무 ${completed}/${tasks.length}</span>
         </div>
       </article>`;
   }).join("");
@@ -291,12 +343,13 @@ function renderContextSearch() {
 
 async function loadDashboard() {
   try {
-    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, projects, agents] = await Promise.all([
+    const [tasks, approvals, events, memories, decisions, commitments, attention, briefingSchedule, knowledge, goals, projects, agents] = await Promise.all([
       api("/api/v1/tasks"), api("/api/v1/approvals"), api("/api/v1/audit-events?limit=9"),
       api("/api/v1/memories"), api("/api/v1/decisions"), api("/api/v1/commitments"),
       api("/api/v1/attention?limit=8"),
       api("/api/v1/briefing-schedule"),
       api("/api/v1/knowledge"),
+      api("/api/v1/goals"),
       api("/api/v1/projects"),
       api("/api/v1/agents"),
     ]);
@@ -308,9 +361,10 @@ async function loadDashboard() {
     state.attention = attention;
     state.briefingSchedule = briefingSchedule;
     state.knowledge = knowledge;
+    state.goals = goals;
     state.projects = projects;
     state.agents = agents;
-    renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderAgents();
+    renderGoals(); renderProjects(); renderTasks(); renderApprovals(); renderMetrics(); renderAttention(); renderBriefingSchedule(); renderCommitments(); renderCompanyContext(); renderAgents();
     $("#activity-list").innerHTML = events.length ? events.map((event) => `
       <div class="activity-item"><strong>${escapeHtml(event.action)}</strong>
       <span>${escapeHtml(event.resource_type)}</span><time>${new Date(event.created_at).toLocaleString("ko-KR")}</time></div>`).join("") : '<p class="empty">아직 활동이 없습니다.</p>';
@@ -353,6 +407,7 @@ $("#approval-list").addEventListener("click", async (event) => {
 });
 
 $("#refresh-button").addEventListener("click", loadDashboard);
+$("#add-goal-button").addEventListener("click", () => $("#goal-dialog").showModal());
 $("#add-project-button").addEventListener("click", () => $("#project-dialog").showModal());
 $("#add-commitment-button").addEventListener("click", () => {
   const availableDecisions = state.decisions.filter((item) => ["proposed", "active"].includes(item.status));
@@ -395,6 +450,25 @@ $("#context-search-form").addEventListener("submit", async (event) => {
   }
 });
 
+$("#goal-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("#goal-form-status").textContent = "저장 중입니다…";
+  try {
+    await api("/api/v1/goals", { method: "POST", body: JSON.stringify({
+      title: $("#goal-title").value.trim(),
+      description: $("#goal-description").value.trim() || null,
+      success_metric: $("#goal-success-metric").value.trim() || null,
+      owner: $("#goal-owner").value.trim() || null,
+      target_date: $("#goal-target-date").value || null,
+      status: $("#goal-status").value,
+    }) });
+    $("#goal-form").reset();
+    $("#goal-form-status").textContent = "";
+    $("#goal-dialog").close();
+    await loadDashboard();
+  } catch (error) { $("#goal-form-status").textContent = error.message; }
+});
+
 $("#project-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("#project-form-status").textContent = "저장 중입니다…";
@@ -403,6 +477,7 @@ $("#project-form").addEventListener("submit", async (event) => {
       title: $("#project-title").value.trim(),
       description: $("#project-description").value.trim() || null,
       status: $("#project-status").value,
+      goal_id: $("#project-goal-id").value || null,
     }) });
     $("#project-form").reset();
     $("#project-form-status").textContent = "";

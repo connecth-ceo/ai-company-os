@@ -25,6 +25,7 @@ from app.models import (
     DecisionScope,
     DecisionStatus,
     Delegation,
+    Goal,
     KnowledgeItem,
     Memory,
     Project,
@@ -60,6 +61,8 @@ from app.schemas import (
     DelegationRecoveryRequest,
     DelegationRecoveryResponse,
     DispatchResponse,
+    GoalCreate,
+    GoalRead,
     KnowledgeCreate,
     KnowledgeRead,
     MemoryCreate,
@@ -331,6 +334,14 @@ async def require_project(session: AsyncSession, project_id: str, tenant_id: str
     return project
 
 
+async def require_goal(session: AsyncSession, goal_id: str, tenant_id: str) -> Goal:
+    query = select(Goal).where(Goal.id == goal_id, Goal.tenant_id == tenant_id)
+    goal = (await session.scalars(query)).first()
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return goal
+
+
 async def require_decision(
     session: AsyncSession,
     decision_id: str,
@@ -379,12 +390,60 @@ def commitment_rejection(
     )
 
 
+@router.post("/goals", response_model=GoalRead, status_code=status.HTTP_201_CREATED)
+async def create_goal(
+    payload: GoalCreate,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Goal:
+    goal = Goal(tenant_id=context.tenant_id, **payload.model_dump())
+    session.add(goal)
+    await session.flush()
+    add_audit_event(
+        session,
+        tenant_id=context.tenant_id,
+        actor=context.actor,
+        action="goal.created",
+        resource_type="goal",
+        resource_id=goal.id,
+        details={"status": goal.status, "target_date": str(goal.target_date or "")},
+    )
+    await session.commit()
+    await session.refresh(goal)
+    return goal
+
+
+@router.get("/goals", response_model=list[GoalRead])
+async def list_goals(
+    status_filter: str | None = Query(default=None, alias="status", max_length=40),
+    limit: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[Goal]:
+    query = select(Goal).where(Goal.tenant_id == context.tenant_id)
+    if status_filter:
+        query = query.where(Goal.status == status_filter)
+    query = query.order_by(Goal.created_at.desc()).limit(limit)
+    return list(await session.scalars(query))
+
+
+@router.get("/goals/{goal_id}", response_model=GoalRead)
+async def get_goal(
+    goal_id: str,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> Goal:
+    return await require_goal(session, goal_id, context.tenant_id)
+
+
 @router.post("/projects", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: ProjectCreate,
     session: AsyncSession = Depends(get_session),
     context: TenantContext = Depends(get_tenant_context),
 ) -> Project:
+    if payload.goal_id:
+        await require_goal(session, payload.goal_id, context.tenant_id)
     project = Project(tenant_id=context.tenant_id, **payload.model_dump())
     session.add(project)
     await session.flush()
@@ -395,6 +454,7 @@ async def create_project(
         action="project.created",
         resource_type="project",
         resource_id=project.id,
+        details={"goal_id": project.goal_id},
     )
     await session.commit()
     await session.refresh(project)
@@ -403,16 +463,16 @@ async def create_project(
 
 @router.get("/projects", response_model=list[ProjectRead])
 async def list_projects(
+    goal_id: str | None = Query(default=None, max_length=36),
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     context: TenantContext = Depends(get_tenant_context),
 ) -> list[Project]:
-    query = (
-        select(Project)
-        .where(Project.tenant_id == context.tenant_id)
-        .order_by(Project.created_at.desc())
-        .limit(limit)
-    )
+    query = select(Project).where(Project.tenant_id == context.tenant_id)
+    if goal_id:
+        await require_goal(session, goal_id, context.tenant_id)
+        query = query.where(Project.goal_id == goal_id)
+    query = query.order_by(Project.created_at.desc()).limit(limit)
     return list(await session.scalars(query))
 
 

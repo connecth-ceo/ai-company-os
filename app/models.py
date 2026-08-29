@@ -123,6 +123,21 @@ class TimestampMixin:
     )
 
 
+class Goal(Base, TimestampMixin):
+    __tablename__ = "goals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="owner", index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    success_metric: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+
+    projects: Mapped[list["Project"]] = relationship(back_populates="goal")
+
+
 class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 
@@ -131,8 +146,12 @@ class Project(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(240))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="active", index=True)
+    goal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("goals.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+    goal: Mapped[Goal | None] = relationship(back_populates="projects")
 
 
 class WorkflowDefinition(Base, TimestampMixin):
