@@ -2,7 +2,7 @@ import json
 import re
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -1004,6 +1004,36 @@ class ExecutionAttemptRead(ORMModel):
     outcome_code: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ExecutionAttemptComplete(BaseModel):
+    expected_payload_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    outcome: Literal["succeeded", "failed", "uncertain"]
+    outcome_code: str = Field(min_length=1, max_length=120)
+    completed_by: str = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize_completion_text(self) -> "ExecutionAttemptComplete":
+        self.outcome_code = self.outcome_code.strip()
+        self.completed_by = self.completed_by.strip()
+        if not self.outcome_code or not self.completed_by:
+            raise ValueError("Completion fields must contain visible text")
+        return self
+
+
+class ExecutionAttemptRecoveryRunRequest(BaseModel):
+    dry_run: bool = True
+    limit: int | None = Field(default=None, ge=1, le=500)
+
+
+class ExecutionAttemptRecoveryRead(BaseModel):
+    generated_at: datetime
+    enabled: bool
+    dry_run: bool
+    scanned: int
+    stale: int
+    transitioned: int
+    attempt_ids: list[str]
 
 
 class AuditEventRead(ORMModel):

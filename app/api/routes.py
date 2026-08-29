@@ -77,8 +77,11 @@ from app.schemas import (
     DelegationRecoveryResponse,
     DispatchResponse,
     ExecutionAttemptClaim,
+    ExecutionAttemptComplete,
     ExecutionAttemptPrepare,
     ExecutionAttemptRead,
+    ExecutionAttemptRecoveryRead,
+    ExecutionAttemptRecoveryRunRequest,
     GoalCreate,
     GoalRead,
     GoalTransition,
@@ -324,6 +327,58 @@ async def claim_execution_attempt(
     await session.commit()
     await session.refresh(attempt)
     return attempt
+
+
+@router.post(
+    "/execution-attempts/{attempt_id}/complete",
+    response_model=ExecutionAttemptRead,
+)
+async def complete_execution_attempt(
+    attempt_id: str,
+    payload: ExecutionAttemptComplete,
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttempt:
+    try:
+        attempt = await execution_attempts.complete_execution_attempt(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            attempt_id=attempt_id,
+            payload=payload,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        await session.rollback()
+        raise execution_attempt_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(attempt)
+    return attempt
+
+
+@router.post(
+    "/execution-attempts/recovery/run",
+    response_model=ExecutionAttemptRecoveryRead,
+)
+async def run_execution_attempt_recovery(
+    payload: ExecutionAttemptRecoveryRunRequest,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> ExecutionAttemptRecoveryRead:
+    try:
+        result = await execution_attempts.run_execution_attempt_recovery(
+            session,
+            tenant_id=context.tenant_id,
+            settings=settings,
+            dry_run=payload.dry_run,
+            limit=payload.limit,
+        )
+    except execution_attempts.ExecutionAttemptRejected as exc:
+        await session.rollback()
+        raise execution_attempt_rejection(exc) from exc
+    if not payload.dry_run:
+        await session.commit()
+    return result
 
 
 @router.get("/tool-catalog", response_model=list[ToolDescriptorRead])

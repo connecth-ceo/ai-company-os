@@ -3,6 +3,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
+from app.db import SessionLocal
 from app.models import (
     ActionIntent,
     ActionIntentStatus,
@@ -11,7 +13,12 @@ from app.models import (
     ExecutionAttempt,
     ExecutionAttemptStatus,
 )
-from app.schemas import ExecutionAttemptClaim, ExecutionAttemptPrepare
+from app.schemas import (
+    ExecutionAttemptClaim,
+    ExecutionAttemptComplete,
+    ExecutionAttemptPrepare,
+    ExecutionAttemptRecoveryRead,
+)
 from app.services.action_intents import verify_payload_integrity
 from app.services.audit import add_audit_event
 
@@ -273,3 +280,190 @@ async def claim_execution_attempt(
         },
     )
     return attempt
+
+
+async def complete_execution_attempt(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    actor: str,
+    attempt_id: str,
+    payload: ExecutionAttemptComplete,
+    now: datetime | None = None,
+) -> ExecutionAttempt:
+    current = now or datetime.now(UTC)
+    attempt = await session.scalar(
+        select(ExecutionAttempt)
+        .where(
+            ExecutionAttempt.id == attempt_id,
+            ExecutionAttempt.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if attempt is None:
+        raise ExecutionAttemptRejected("attempt_not_found", "Execution attempt not found")
+    if attempt.payload_hash != payload.expected_payload_hash:
+        raise ExecutionAttemptRejected(
+            "payload_hash_mismatch",
+            "Expected payload hash does not match the claimed execution attempt",
+        )
+
+    terminal_statuses = {
+        ExecutionAttemptStatus.SUCCEEDED,
+        ExecutionAttemptStatus.FAILED,
+        ExecutionAttemptStatus.UNCERTAIN,
+    }
+    outcome = ExecutionAttemptStatus(payload.outcome)
+    if attempt.status in terminal_statuses:
+        if attempt.status == outcome and attempt.outcome_code == payload.outcome_code:
+            return attempt
+        raise ExecutionAttemptRejected(
+            "attempt_already_completed",
+            "Execution attempt already has a different terminal outcome",
+        )
+    if attempt.status != ExecutionAttemptStatus.CLAIMED:
+        raise ExecutionAttemptRejected(
+            "attempt_not_claimed",
+            "Execution attempt must be claimed before recording an outcome",
+        )
+
+    intent = await _load_intent(
+        session,
+        tenant_id=tenant_id,
+        intent_id=attempt.action_intent_id,
+    )
+    try:
+        verify_payload_integrity(intent)
+    except ValueError as exc:
+        raise ExecutionAttemptRejected("payload_integrity_failed", str(exc)) from exc
+    if intent.payload_hash != payload.expected_payload_hash:
+        raise ExecutionAttemptRejected(
+            "payload_hash_mismatch",
+            "Approved payload hash changed before outcome recording",
+        )
+    if intent.status != ActionIntentStatus.CONSUMED:
+        raise ExecutionAttemptRejected(
+            "intent_not_consumed",
+            "Action intent must remain consumed while recording an execution outcome",
+        )
+
+    attempt.status = outcome
+    attempt.outcome_code = payload.outcome_code
+    attempt.completed_at = current
+    add_audit_event(
+        session,
+        tenant_id=tenant_id,
+        actor=actor,
+        action=f"execution_attempt.{outcome.value}",
+        resource_type="execution_attempt",
+        resource_id=attempt.id,
+        details={
+            "action_intent_id": intent.id,
+            "connector_key": attempt.connector_key,
+            "payload_hash": attempt.payload_hash,
+            "completed_by": payload.completed_by,
+            "outcome_code": attempt.outcome_code,
+            "external_call_performed_by_this_service": False,
+        },
+    )
+    return attempt
+
+
+async def run_execution_attempt_recovery(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    settings: Settings,
+    dry_run: bool = True,
+    limit: int | None = None,
+    now: datetime | None = None,
+    actor: str = "system:execution-attempt-recovery",
+) -> ExecutionAttemptRecoveryRead:
+    if not dry_run and not settings.execution_attempt_recovery_enabled:
+        raise ExecutionAttemptRejected(
+            "execution_attempt_recovery_disabled",
+            "Execution attempt recovery is disabled; use dry-run or enable it explicitly",
+        )
+
+    current = now or datetime.now(UTC)
+    run_limit = limit or settings.execution_attempt_recovery_limit
+    stale_attempts = list(
+        await session.scalars(
+            select(ExecutionAttempt)
+            .where(
+                ExecutionAttempt.tenant_id == tenant_id,
+                ExecutionAttempt.status == ExecutionAttemptStatus.CLAIMED,
+                ExecutionAttempt.deadline_at <= current,
+            )
+            .order_by(ExecutionAttempt.deadline_at, ExecutionAttempt.id)
+            .limit(run_limit)
+            .with_for_update()
+        )
+    )
+    attempt_ids = [attempt.id for attempt in stale_attempts]
+    if dry_run:
+        return ExecutionAttemptRecoveryRead(
+            generated_at=current,
+            enabled=settings.execution_attempt_recovery_enabled,
+            dry_run=True,
+            scanned=len(stale_attempts),
+            stale=len(stale_attempts),
+            transitioned=0,
+            attempt_ids=attempt_ids,
+        )
+
+    for attempt in stale_attempts:
+        attempt.status = ExecutionAttemptStatus.UNCERTAIN
+        attempt.completed_at = current
+        attempt.outcome_code = "deadline_exceeded_without_confirmation"
+        add_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor=actor,
+            action="execution_attempt.uncertain",
+            resource_type="execution_attempt",
+            resource_id=attempt.id,
+            details={
+                "action_intent_id": attempt.action_intent_id,
+                "connector_key": attempt.connector_key,
+                "payload_hash": attempt.payload_hash,
+                "outcome_code": attempt.outcome_code,
+                "automatic_retry_started": False,
+            },
+        )
+    return ExecutionAttemptRecoveryRead(
+        generated_at=current,
+        enabled=True,
+        dry_run=False,
+        scanned=len(stale_attempts),
+        stale=len(stale_attempts),
+        transitioned=len(stale_attempts),
+        attempt_ids=attempt_ids,
+    )
+
+
+async def dispatch_scheduled_execution_attempt_recovery(
+    *,
+    settings: Settings | None = None,
+) -> ExecutionAttemptRecoveryRead:
+    runtime_settings = settings or get_settings()
+    if not runtime_settings.execution_attempt_recovery_enabled:
+        return ExecutionAttemptRecoveryRead(
+            generated_at=datetime.now(UTC),
+            enabled=False,
+            dry_run=False,
+            scanned=0,
+            stale=0,
+            transitioned=0,
+            attempt_ids=[],
+        )
+
+    async with SessionLocal() as session:
+        result = await run_execution_attempt_recovery(
+            session,
+            tenant_id=runtime_settings.default_tenant_id,
+            settings=runtime_settings,
+            dry_run=False,
+        )
+        await session.commit()
+        return result

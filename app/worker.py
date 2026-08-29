@@ -9,6 +9,7 @@ from app.services.delegation_execution import (
     DelegationExecutionError,
     execute_delegation_with_new_session,
 )
+from app.services.execution_attempts import dispatch_scheduled_execution_attempt_recovery
 from app.services.task_service import TaskExecutionError, execute_task_with_new_session
 
 settings = get_settings()
@@ -36,6 +37,10 @@ celery_app.conf.update(
         "attention-auto-plan-tick": {
             "task": "ai_company.dispatch_attention_auto_plan",
             "schedule": float(settings.attention_auto_plan_interval_seconds),
+        },
+        "execution-attempt-recovery-tick": {
+            "task": "ai_company.dispatch_execution_attempt_recovery",
+            "schedule": float(settings.execution_attempt_recovery_interval_seconds),
         },
     },
 )
@@ -85,4 +90,15 @@ def dispatch_attention_auto_plan_job() -> dict[str, str | int | bool]:
         "eligible": result.eligible,
         "created": result.created,
         "skipped": result.skipped,
+    }
+
+
+@celery_app.task(name="ai_company.dispatch_execution_attempt_recovery", max_retries=0)
+def dispatch_execution_attempt_recovery_job() -> dict[str, int | bool]:
+    result = asyncio.run(dispatch_scheduled_execution_attempt_recovery(settings=settings))
+    return {
+        "enabled": result.enabled,
+        "scanned": result.scanned,
+        "stale": result.stale,
+        "transitioned": result.transitioned,
     }

@@ -15,7 +15,7 @@
 - OpenAI Agents SDK 실행 모드와 API 키 없는 mock 모드
 - 중앙 Tool Gateway를 통한 읽기 전용 웹 검색 권한 검증과 감사 메타데이터
 - 외부 행동 payload hash·만료·단일사용 범위를 고정하는 제안 전용 ActionIntent
-- 승인·hash·만료를 재검사하고 외부 호출 없이 단일사용 claim을 기록하는 ExecutionAttempt 원장
+- 승인·hash·만료를 재검사하고 외부 호출 없이 단일사용 claim·결과·timeout 격리를 기록하는 ExecutionAttempt 원장
 - 프롬프트·비밀값을 제외한 읽기 전용 AI Employee Registry
 - Goal → Project → Task 전략 계층, 제한된 상태 전이, 읽기 전용 건강도와 AI 직원 권한을 보여주는 Executive UI
 - Docker Compose 로컬/배포 기준 구성

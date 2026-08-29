@@ -56,6 +56,12 @@ services:
         value: "300"
       - key: ATTENTION_AUTO_PLAN_LIMIT
         value: "20"
+      - key: EXECUTION_ATTEMPT_RECOVERY_ENABLED
+        value: "false"
+      - key: EXECUTION_ATTEMPT_RECOVERY_INTERVAL_SECONDS
+        value: "60"
+      - key: EXECUTION_ATTEMPT_RECOVERY_LIMIT
+        value: "100"
       - key: OPENAI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -190,6 +196,21 @@ services:
           type: web
           name: ai-company-os
           envVarKey: ATTENTION_AUTO_PLAN_LIMIT
+      - key: EXECUTION_ATTEMPT_RECOVERY_ENABLED
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: EXECUTION_ATTEMPT_RECOVERY_ENABLED
+      - key: EXECUTION_ATTEMPT_RECOVERY_INTERVAL_SECONDS
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: EXECUTION_ATTEMPT_RECOVERY_INTERVAL_SECONDS
+      - key: EXECUTION_ATTEMPT_RECOVERY_LIMIT
+        fromService:
+          type: web
+          name: ai-company-os
+          envVarKey: EXECUTION_ATTEMPT_RECOVERY_LIMIT
       - key: OPENAI_API_KEY
         fromService:
           type: web

@@ -32,6 +32,14 @@ def test_attention_auto_plan_tick_is_registered_fail_closed():
     assert "ai_company.dispatch_attention_auto_plan" in celery_app.tasks
 
 
+def test_execution_attempt_recovery_tick_is_registered_fail_closed():
+    schedule = celery_app.conf.beat_schedule["execution-attempt-recovery-tick"]
+
+    assert schedule["task"] == "ai_company.dispatch_execution_attempt_recovery"
+    assert schedule["schedule"] == 60.0
+    assert "ai_company.dispatch_execution_attempt_recovery" in celery_app.tasks
+
+
 async def test_redelivered_worker_task_recovers_interrupted_run():
     async with SessionLocal() as session:
         task = Task(

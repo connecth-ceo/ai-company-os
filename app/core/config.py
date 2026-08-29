@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     attention_auto_plan_enabled: bool = False
     attention_auto_plan_interval_seconds: int = Field(default=300, ge=60, le=86_400)
     attention_auto_plan_limit: int = Field(default=20, ge=1, le=200)
+    execution_attempt_recovery_enabled: bool = False
+    execution_attempt_recovery_interval_seconds: int = Field(default=60, ge=30, le=3_600)
+    execution_attempt_recovery_limit: int = Field(default=100, ge=1, le=500)
     auth_enabled: bool = False
     app_api_key: str | None = Field(default=None, repr=False)
     default_tenant_id: str = "owner"
