@@ -55,4 +55,3 @@ finally {
     $apiKey = $null
     $headers = $null
 }
-
