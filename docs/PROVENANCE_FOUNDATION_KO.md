@@ -26,7 +26,9 @@ Research Agent 결과
 - `GET /api/v1/provenance/{record_id}`
 - 목록 필터: `subject_type`, `knowledge_item_id`, `decision_id`, `task_id`, `verification_status`, `limit`
 
-외부 생성·수정·삭제 API는 제공하지 않는다. 레코드는 Research/Decision 저장 트랜잭션 안에서만 생성된다.
+근거 레코드의 외부 생성·수정·삭제 API는 제공하지 않는다. 레코드는 Research/Decision 저장 트랜잭션 안에서만
+생성된다. 후속 검증·반려 판정은 근거 내용을 바꾸지 않는 별도 `ProvenanceReview` 추가형 원장에 저장한다.
+자세한 계약은 [PROVENANCE_REVIEW_KO.md](PROVENANCE_REVIEW_KO.md)에 설명되어 있다.
 
 ## 저장 필드
 
