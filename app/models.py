@@ -625,6 +625,40 @@ class ProvenanceReview(Base, TimestampMixin):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class AttentionAcknowledgement(Base, TimestampMixin):
+    __tablename__ = "attention_acknowledgements"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key"),
+        UniqueConstraint(
+            "tenant_id",
+            "attention_id",
+            "fingerprint",
+            name="uq_attention_acknowledgements_signal",
+        ),
+        CheckConstraint(
+            "level IN ('info', 'watch', 'action', 'decision', 'critical')",
+            name="ck_attention_acknowledgement_level",
+        ),
+        CheckConstraint(
+            "kind IN ('overdue_commitment', 'long_running_task', 'task_failure', "
+            "'pending_approval', 'decision_governance')",
+            name="ck_attention_acknowledgement_kind",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    attention_id: Mapped[str] = mapped_column(String(160), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    level: Mapped[AttentionLevel] = mapped_column(String(40), index=True)
+    kind: Mapped[AttentionKind] = mapped_column(String(40), index=True)
+    resource_type: Mapped[str] = mapped_column(String(80))
+    resource_id: Mapped[str] = mapped_column(String(80), index=True)
+    acknowledged_by: Mapped[str] = mapped_column(String(100))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Approval(Base, TimestampMixin):
     __tablename__ = "approvals"
 

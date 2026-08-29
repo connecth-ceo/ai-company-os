@@ -56,11 +56,12 @@
         <div class="panel-heading">
           <div><p class="eyebrow">JARVIS ATTENTION</p><h2>대표 주의 큐</h2></div>
           <div class="badge-group">
+            <span id="attention-ack-badge" class="rule-badge">미확인 계산 중</span>
             <span class="rule-badge">규칙 기반 · 비용 없음</span>
             <span id="briefing-schedule-badge" class="schedule-badge">자동 브리핑 확인 중</span>
           </div>
         </div>
-        <p class="panel-note">지연 약속, 장기 실행, 실패, 승인 적체를 결정론적으로 정렬합니다. 항목을 탐지할 뿐 자동 실행하지 않습니다.</p>
+        <p class="panel-note">운영·결정 신호를 결정론적으로 정렬합니다. 확인은 기록만 남기며, 위험 단계나 근거가 바뀌면 다시 나타납니다.</p>
         <div id="attention-list" class="attention-list"><p class="empty">주의 항목을 확인하는 중입니다.</p></div>
       </section>
 

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -7,6 +9,7 @@ from app.core.config import Settings
 from app.models import (
     Approval,
     ApprovalStatus,
+    AttentionAcknowledgement,
     AttentionKind,
     AttentionLevel,
     Commitment,
@@ -26,13 +29,18 @@ from app.schemas import (
 from app.services.decision_follow_through import build_decision_follow_through
 from app.services.decision_readiness import build_decision_readiness
 
-RULE_VERSION = "attention-rules-v2"
+RULE_VERSION = "attention-rules-v3"
 LEVEL_ORDER = {
     AttentionLevel.INFO: 0,
     AttentionLevel.WATCH: 1,
     AttentionLevel.ACTION: 2,
     AttentionLevel.DECISION: 3,
     AttentionLevel.CRITICAL: 4,
+}
+VOLATILE_EVIDENCE_KEYS = {
+    "overdue_seconds",
+    "pending_seconds",
+    "running_seconds",
 }
 
 
@@ -48,6 +56,31 @@ def _age_seconds(current: datetime, detected_at: datetime) -> int:
 
 def _item_id(kind: AttentionKind, resource_id: str) -> str:
     return f"{kind.value}:{resource_id}"
+
+
+def attention_fingerprint(item: AttentionItemRead) -> str:
+    """Hash stable signal state while ignoring counters that change every request."""
+
+    stable_evidence = {
+        key: value for key, value in item.evidence.items() if key not in VOLATILE_EVIDENCE_KEYS
+    }
+    payload = {
+        "id": item.id,
+        "level": item.level.value,
+        "kind": item.kind.value,
+        "resource_type": item.resource_type,
+        "resource_id": item.resource_id,
+        "project_id": item.project_id,
+        "detected_at": as_utc(item.detected_at).isoformat(),
+        "evidence": stable_evidence,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _decision_detected_at(
@@ -120,7 +153,8 @@ async def build_attention_queue(
     now: datetime | None = None,
     minimum_level: AttentionLevel = AttentionLevel.INFO,
     kind: AttentionKind | None = None,
-    limit: int = 100,
+    include_acknowledged: bool = True,
+    limit: int | None = 100,
 ) -> AttentionQueueRead:
     """Compute a read-only CEO attention queue without an AI call or side effect."""
 
@@ -377,6 +411,43 @@ async def build_attention_queue(
             item.resource_id,
         )
     )
+    selected = [
+        item.model_copy(update={"fingerprint": attention_fingerprint(item)}) for item in selected
+    ]
+    acknowledgements = []
+    if selected:
+        attention_ids = [item.id for item in selected]
+        acknowledgements = list(
+            await session.scalars(
+                select(AttentionAcknowledgement).where(
+                    AttentionAcknowledgement.tenant_id == tenant_id,
+                    AttentionAcknowledgement.attention_id.in_(attention_ids),
+                )
+            )
+        )
+    acknowledgement_by_signal = {
+        (item.attention_id, item.fingerprint): item for item in acknowledgements
+    }
+    selected = [
+        item.model_copy(
+            update={
+                "acknowledged": acknowledgement is not None,
+                "acknowledgement_id": acknowledgement.id if acknowledgement else None,
+                "acknowledged_at": acknowledgement.created_at if acknowledgement else None,
+                "acknowledged_by": (acknowledgement.acknowledged_by if acknowledgement else None),
+            }
+        )
+        for item in selected
+        for acknowledgement in [acknowledgement_by_signal.get((item.id, item.fingerprint))]
+    ]
+    acknowledged_total = sum(1 for item in selected if item.acknowledged)
+    unacknowledged_total = len(selected) - acknowledged_total
+    unacknowledged_counts = {
+        level.value: sum(1 for item in selected if item.level == level and not item.acknowledged)
+        for level in AttentionLevel
+    }
+    if not include_acknowledged:
+        selected = [item for item in selected if not item.acknowledged]
     counts = {
         level.value: sum(1 for item in selected if item.level == level) for level in AttentionLevel
     }
@@ -385,5 +456,8 @@ async def build_attention_queue(
         generated_at=current,
         total=len(selected),
         counts=counts,
-        items=selected[:limit],
+        unacknowledged_counts=unacknowledged_counts,
+        acknowledged_total=acknowledged_total,
+        unacknowledged_total=unacknowledged_total,
+        items=selected if limit is None else selected[:limit],
     )

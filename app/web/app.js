@@ -103,6 +103,7 @@ const attentionKindLabels = {
   long_running_task: "장기 실행",
   task_failure: "업무 실패",
   pending_approval: "승인 대기",
+  decision_governance: "결정 거버넌스",
 };
 
 const projectStatusLabels = {
@@ -378,19 +379,28 @@ function renderAgents() {
 
 function renderAttention() {
   const items = state.attention.items || [];
+  const unacknowledgedCounts = state.attention.unacknowledged_counts || {};
+  $("#attention-ack-badge").textContent = `미확인 ${state.attention.unacknowledged_total || 0}건`;
+  $("#metric-attention").textContent = (unacknowledgedCounts.decision || 0) + (unacknowledgedCounts.critical || 0);
   if (!items.length) {
     $("#attention-list").innerHTML = '<p class="empty">현재 대표가 확인할 주의 항목이 없습니다.</p>';
     return;
   }
   $("#attention-list").innerHTML = items.slice(0, 8).map((item) => `
-    <article class="attention-item level-${escapeHtml(item.level)}">
+    <article class="attention-item level-${escapeHtml(item.level)} ${item.acknowledged ? "is-acknowledged" : ""}">
       <div class="attention-heading">
         <span class="attention-level">${escapeHtml(attentionLevelLabels[item.level] || item.level)}</span>
         <span class="attention-kind">${escapeHtml(attentionKindLabels[item.kind] || item.kind)}</span>
+        ${item.acknowledged ? '<span class="attention-ack-state">확인됨</span>' : ""}
       </div>
       <strong>${escapeHtml(item.title)}</strong>
       <p>${escapeHtml(item.summary)}</p>
       <small>${escapeHtml(item.recommendation)}</small>
+      <div class="attention-actions">
+        ${item.acknowledged
+          ? `<span>${escapeHtml(item.acknowledged_by || "CEO")} 확인</span>`
+          : `<button type="button" data-attention-id="${escapeHtml(item.id)}" data-attention-fingerprint="${escapeHtml(item.fingerprint)}">확인 처리</button>`}
+      </div>
     </article>
   `).join("");
 }
@@ -642,6 +652,28 @@ $("#approval-list").addEventListener("click", async (event) => {
     approved: button.dataset.approved === "true", decided_by: "CEO", note: "CEO Desk에서 결정",
   }) });
   await loadDashboard();
+});
+
+$("#attention-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-attention-id]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/api/v1/attention/${encodeURIComponent(button.dataset.attentionId)}/acknowledgements`, {
+      method: "POST",
+      body: JSON.stringify({
+        expected_fingerprint: button.dataset.attentionFingerprint,
+        acknowledged_by: "CEO",
+        note: "CEO Desk에서 확인",
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+    await loadDashboard();
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("#provenance-list").addEventListener("click", async (event) => {

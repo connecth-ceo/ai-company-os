@@ -14,6 +14,7 @@ from app.models import (
     AICostLedgerEntry,
     Approval,
     ApprovalStatus,
+    AttentionAcknowledgement,
     AttentionKind,
     AttentionLevel,
     AuditEvent,
@@ -47,6 +48,8 @@ from app.schemas import (
     ApprovalCreate,
     ApprovalDecision,
     ApprovalRead,
+    AttentionAcknowledgementCreate,
+    AttentionAcknowledgementRead,
     AttentionQueueRead,
     AuditEventRead,
     BriefingDeliveryRead,
@@ -93,6 +96,7 @@ from app.services import (
     action_intents,
     agent_directory,
     attention,
+    attention_acknowledgements,
     commitments,
     company_search,
     decision_follow_through,
@@ -247,6 +251,7 @@ async def get_attention_queue(
         alias="min_level",
     ),
     kind: AttentionKind | None = Query(default=None),
+    include_acknowledged: bool = Query(default=True),
     limit: int = Query(default=100, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -258,8 +263,66 @@ async def get_attention_queue(
         settings=settings,
         minimum_level=minimum_level,
         kind=kind,
+        include_acknowledged=include_acknowledged,
         limit=limit,
     )
+
+
+def attention_acknowledgement_rejection(
+    error: attention_acknowledgements.AttentionAcknowledgementRejected,
+) -> HTTPException:
+    status_code = 404 if error.code == "attention_not_found" else 409
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": error.code, "message": error.detail},
+    )
+
+
+@router.get(
+    "/attention/acknowledgements",
+    response_model=list[AttentionAcknowledgementRead],
+)
+async def list_attention_acknowledgements(
+    attention_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    context: TenantContext = Depends(get_tenant_context),
+) -> list[AttentionAcknowledgement]:
+    return await attention_acknowledgements.list_attention_acknowledgements(
+        session,
+        tenant_id=context.tenant_id,
+        attention_id=attention_id,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/attention/{attention_id}/acknowledgements",
+    response_model=AttentionAcknowledgementRead,
+    status_code=201,
+)
+async def acknowledge_attention(
+    attention_id: str,
+    payload: AttentionAcknowledgementCreate,
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    context: TenantContext = Depends(get_tenant_context),
+) -> AttentionAcknowledgement:
+    try:
+        acknowledgement = await attention_acknowledgements.acknowledge_attention(
+            session,
+            tenant_id=context.tenant_id,
+            actor=context.actor,
+            attention_id=attention_id,
+            payload=payload,
+            settings=settings,
+        )
+    except attention_acknowledgements.AttentionAcknowledgementRejected as exc:
+        await session.rollback()
+        raise attention_acknowledgement_rejection(exc) from exc
+    await session.commit()
+    await session.refresh(acknowledgement)
+    return acknowledgement
 
 
 @router.get("/briefing-deliveries", response_model=list[BriefingDeliveryRead])

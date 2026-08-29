@@ -33,7 +33,7 @@
 - 내용 해시 재확인, 검증·반려·정정 이력과 감사 이벤트를 갖춘 근거 검토 원장
 - 반려·미검증·관찰 근거를 비용 없이 우선순위화하는 근거 품질 큐와 검증률 요약
 - 담당자·마감일·출처·관련 결정이 있는 약속/후속조치와 기한 초과 추적
-- 지연 약속·장기 실행·업무 실패·승인 적체와 결정 신뢰도·후속 실행 위험을 비용 없이 통합 정렬하는 대표 주의 큐
+- 지연 약속·장기 실행·업무 실패·승인 적체와 결정 신뢰도·후속 실행 위험을 비용 없이 통합 정렬하고 신호별 확인 이력을 남기는 대표 주의 큐
 - 외부 발송·결제·삭제·배포 요청을 대표 승인함에 자동 등록
 - 민감 역할·고비용 AI 위임을 대표 승인 전 실행하지 않는 승인 게이트
 - Worker 정체 위임의 dry-run 진단, 안전 복구, 비용 중복 방지 격리
@@ -140,6 +140,8 @@ AI 직원 역할·버전·도구·승인 정책 조회 기준은
 [docs/DECISION_FOLLOW_THROUGH_COMPLETION_REPORT_KO.md](docs/DECISION_FOLLOW_THROUGH_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 결정 신뢰도와 후속 실행 위험을 대표 주의 큐·브리핑에 합치는 기준은
 [docs/DECISION_ATTENTION_INTEGRATION_COMPLETION_REPORT_KO.md](docs/DECISION_ATTENTION_INTEGRATION_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
+동일 주의 신호의 확인 기록, 변경 시 재등장, 브리핑 중복 억제 기준은
+[docs/ATTENTION_ACKNOWLEDGEMENT_COMPLETION_REPORT_KO.md](docs/ATTENTION_ACKNOWLEDGEMENT_COMPLETION_REPORT_KO.md)에 기록되어 있습니다.
 
 ## V0.4에서 이어지는 실제 사용 흐름
 

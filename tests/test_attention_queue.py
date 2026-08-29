@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.core.config import Settings
 from app.db import SessionLocal
-from app.models import Approval, Task, TaskRun, TaskStatus
+from app.models import Approval, Commitment, Task, TaskRun, TaskStatus
 
 
 def commitment_payload(statement: str, due_at: datetime) -> dict[str, str]:
@@ -49,12 +49,20 @@ async def age_approval(approval_id: str, *, age: timedelta) -> None:
         await session.commit()
 
 
+async def age_commitment(commitment_id: str, *, age: timedelta) -> None:
+    async with SessionLocal() as session:
+        commitment = await session.get(Commitment, commitment_id)
+        assert commitment is not None
+        commitment.due_at = datetime.now(UTC) - age
+        await session.commit()
+
+
 def test_attention_queue_is_empty_without_signals(client):
     response = client.get("/api/v1/attention")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["rule_version"] == "attention-rules-v2"
+    assert body["rule_version"] == "attention-rules-v3"
     assert body["total"] == 0
     assert body["items"] == []
     assert body["counts"] == {
@@ -64,6 +72,8 @@ def test_attention_queue_is_empty_without_signals(client):
         "decision": 0,
         "critical": 0,
     }
+    assert body["acknowledged_total"] == 0
+    assert body["unacknowledged_total"] == 0
 
 
 def test_overdue_commitments_receive_escalating_levels_and_are_tenant_safe(client):
@@ -185,6 +195,128 @@ def test_attention_filters_and_limit_are_applied_after_priority_sort(client):
     assert body["counts"]["decision"] == 1
     assert len(body["items"]) == 1
     assert body["items"][0]["level"] == "critical"
+
+
+def test_attention_acknowledgement_is_tenant_safe_idempotent_and_resurfaces(client):
+    commitment = client.post(
+        "/api/v1/commitments",
+        json=commitment_payload("확인 후 단계 변경", datetime.now(UTC) - timedelta(hours=2)),
+    ).json()
+    first = client.get("/api/v1/attention").json()
+    item = first["items"][0]
+
+    assert len(item["fingerprint"]) == 64
+    assert item["acknowledged"] is False
+    payload = {
+        "expected_fingerprint": item["fingerprint"],
+        "acknowledged_by": "CEO",
+        "note": "확인 완료",
+        "idempotency_key": "attention-ack-001",
+    }
+    created = client.post(
+        f"/api/v1/attention/{item['id']}/acknowledgements",
+        json=payload,
+    )
+
+    assert created.status_code == 201
+    acknowledgement = created.json()
+    assert acknowledgement["attention_id"] == item["id"]
+    assert acknowledgement["resource_id"] == commitment["id"]
+    repeated = client.post(
+        f"/api/v1/attention/{item['id']}/acknowledgements",
+        json=payload,
+    )
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == acknowledgement["id"]
+
+    current = client.get("/api/v1/attention").json()
+    assert current["acknowledged_total"] == 1
+    assert current["unacknowledged_total"] == 0
+    assert current["unacknowledged_counts"]["action"] == 0
+    assert current["items"][0]["acknowledged"] is True
+    assert current["items"][0]["acknowledgement_id"] == acknowledgement["id"]
+    assert client.get("/api/v1/attention?include_acknowledged=false").json()["total"] == 0
+
+    history = client.get(
+        "/api/v1/attention/acknowledgements",
+        params={"attention_id": item["id"]},
+    ).json()
+    assert [entry["id"] for entry in history] == [acknowledgement["id"]]
+    assert (
+        client.get(
+            "/api/v1/attention/acknowledgements",
+            headers={"X-Tenant-ID": "other"},
+        ).json()
+        == []
+    )
+
+    conflict = client.post(
+        f"/api/v1/attention/{item['id']}/acknowledgements",
+        json={**payload, "note": "다른 요청"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["code"] == "idempotency_conflict"
+
+    asyncio.run(age_commitment(commitment["id"], age=timedelta(hours=80)))
+    resurfaced = client.get("/api/v1/attention?include_acknowledged=false").json()
+    assert resurfaced["total"] == 1
+    assert resurfaced["items"][0]["resource_id"] == commitment["id"]
+    assert resurfaced["items"][0]["level"] == "critical"
+    assert resurfaced["items"][0]["fingerprint"] != item["fingerprint"]
+
+
+def test_attention_acknowledgement_rejects_a_stale_fingerprint(client):
+    client.post(
+        "/api/v1/commitments",
+        json=commitment_payload("지문 검증", datetime.now(UTC) - timedelta(hours=2)),
+    )
+    item = client.get("/api/v1/attention").json()["items"][0]
+
+    response = client.post(
+        f"/api/v1/attention/{item['id']}/acknowledgements",
+        json={
+            "expected_fingerprint": "0" * 64,
+            "acknowledged_by": "CEO",
+            "idempotency_key": "attention-ack-stale-001",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "attention_fingerprint_mismatch"
+
+
+def test_acknowledged_attention_is_not_repeated_in_daily_briefing(client):
+    approval = client.post(
+        "/api/v1/approvals",
+        json={"action": "브리핑 중복 방지", "reason": "대표 확인", "risk": "critical"},
+    ).json()
+    item = client.get("/api/v1/attention?kind=pending_approval").json()["items"][0]
+    response = client.post(
+        f"/api/v1/attention/{item['id']}/acknowledgements",
+        json={
+            "expected_fingerprint": item["fingerprint"],
+            "acknowledged_by": "CEO",
+            "idempotency_key": "attention-briefing-ack-001",
+        },
+    )
+    assert response.status_code == 201
+
+    async def build() -> str:
+        async with SessionLocal() as session:
+            from app.services.daily_briefing import build_daily_briefing
+
+            return await build_daily_briefing(
+                session,
+                "owner",
+                now=datetime.now(UTC),
+                settings=Settings(ai_provider="mock"),
+            )
+
+    briefing = asyncio.run(build())
+
+    assert approval["id"] == item["resource_id"]
+    assert "대표 확인 필요 0건" in briefing
+    assert "브리핑 중복 방지" not in briefing
 
 
 def test_daily_briefing_includes_top_attention_without_ai_call(client):

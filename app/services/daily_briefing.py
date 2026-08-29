@@ -98,6 +98,7 @@ async def build_daily_briefing(
         tenant_id,
         settings=runtime_settings,
         now=current,
+        include_acknowledged=False,
         limit=5,
     )
 

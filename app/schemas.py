@@ -234,6 +234,11 @@ class AttentionItemRead(BaseModel):
     detected_at: datetime
     age_seconds: int
     evidence: dict[str, str | int | float | bool | None]
+    fingerprint: str = ""
+    acknowledged: bool = False
+    acknowledgement_id: str | None = None
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
 
 
 class AttentionQueueRead(BaseModel):
@@ -241,7 +246,38 @@ class AttentionQueueRead(BaseModel):
     generated_at: datetime
     total: int
     counts: dict[str, int]
+    unacknowledged_counts: dict[str, int] = Field(default_factory=dict)
+    acknowledged_total: int = 0
+    unacknowledged_total: int = 0
     items: list[AttentionItemRead]
+
+
+class AttentionAcknowledgementCreate(BaseModel):
+    expected_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    acknowledged_by: str = Field(default="CEO", min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=2_000)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize_note(self) -> "AttentionAcknowledgementCreate":
+        if self.note is not None:
+            self.note = self.note.strip() or None
+        return self
+
+
+class AttentionAcknowledgementRead(ORMModel):
+    id: str
+    tenant_id: str
+    attention_id: str
+    fingerprint: str
+    idempotency_key: str
+    level: AttentionLevel
+    kind: AttentionKind
+    resource_type: str
+    resource_id: str
+    acknowledged_by: str
+    note: str | None
+    created_at: datetime
 
 
 class BriefingDeliveryRead(ORMModel):

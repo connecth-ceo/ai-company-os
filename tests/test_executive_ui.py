@@ -20,6 +20,7 @@ def test_ceo_desk_exposes_project_and_ai_team_panels(client):
     assert 'id="provenance-list"' in html
     assert 'id="provenance-quality"' in html
     assert 'id="provenance-quality-list"' in html
+    assert 'id="attention-ack-badge"' in html
     assert "프롬프트와 비밀값은 노출하지 않습니다." in html
 
 
@@ -49,6 +50,8 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert "renderDecisionReadiness()" in script.text
     assert "renderDecisionFollowThrough()" in script.text
     assert "data-provenance-review" in script.text
+    assert "data-attention-fingerprint" in script.text
+    assert "/acknowledgements`" in script.text
     assert "/reviews`" in script.text
     assert "/transition`" in script.text
     assert "data-goal-id" in script.text
@@ -65,3 +68,4 @@ def test_ceo_desk_assets_wire_existing_safe_apis(client):
     assert ".provenance-quality-list" in stylesheet.text
     assert ".decision-readiness-list" in stylesheet.text
     assert ".decision-follow-through-list" in stylesheet.text
+    assert ".attention-actions" in stylesheet.text
