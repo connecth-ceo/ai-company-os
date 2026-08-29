@@ -122,9 +122,7 @@ async def run_attention_automation(
                     kind=item.kind,
                     level=item.level,
                     decision=(
-                        "manual"
-                        if reason.startswith(("requires_", "elevated_"))
-                        else "skipped"
+                        "manual" if reason.startswith(("requires_", "elevated_")) else "skipped"
                     ),
                     reason=reason,
                     follow_up_id=item.follow_up_id,
