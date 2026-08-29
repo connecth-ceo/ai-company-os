@@ -133,6 +133,50 @@ class ProvenanceQualityRead(BaseModel):
     items: list[ProvenanceQualityItemRead]
 
 
+class DecisionReadinessLevel(StrEnum):
+    READY = "ready"
+    WATCH = "watch"
+    REVIEW = "review"
+    BLOCKED = "blocked"
+    CLOSED = "closed"
+
+
+class DecisionReadinessItemRead(BaseModel):
+    id: str
+    subject: str
+    choice: str
+    status: DecisionStatus
+    scope: DecisionScope
+    applies_to: dict[str, str]
+    readiness_level: DecisionReadinessLevel
+    readiness_reason: str
+    signals: list[str]
+    evidence_counts: dict[str, int]
+    total_evidence: int
+    effective_at: datetime
+    expires_at: datetime | None
+    review_due_at: datetime | None
+
+
+class DecisionReadinessSummaryRead(BaseModel):
+    total_decisions: int
+    active_decisions: int
+    proposed_decisions: int
+    ready_decisions: int
+    watch_decisions: int
+    review_decisions: int
+    blocked_decisions: int
+    closed_decisions: int
+    readiness_counts: dict[str, int]
+
+
+class DecisionReadinessRead(BaseModel):
+    rule_version: str
+    generated_at: datetime
+    summary: DecisionReadinessSummaryRead
+    items: list[DecisionReadinessItemRead]
+
+
 class AttentionItemRead(BaseModel):
     id: str
     level: AttentionLevel
