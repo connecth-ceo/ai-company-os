@@ -12,6 +12,7 @@ from app.services.delegation_execution import (
     execute_delegation_with_new_session,
 )
 from app.services.execution_attempts import dispatch_scheduled_execution_attempt_recovery
+from app.services.task_recovery import recover_stale_tasks_with_new_session
 from app.services.task_service import (
     TaskExecutionError,
     execute_task_with_new_session,
@@ -48,6 +49,10 @@ celery_app.conf.update(
         "execution-attempt-recovery-tick": {
             "task": "ai_company.dispatch_execution_attempt_recovery",
             "schedule": float(settings.execution_attempt_recovery_interval_seconds),
+        },
+        "task-recovery-tick": {
+            "task": "ai_company.dispatch_task_recovery",
+            "schedule": float(settings.task_recovery_interval_seconds),
         },
     },
 )
@@ -115,6 +120,26 @@ def dispatch_execution_attempt_recovery_job() -> dict[str, int | bool]:
         "scanned": result.scanned,
         "stale": result.stale,
         "transitioned": result.transitioned,
+    }
+
+
+@celery_app.task(name="ai_company.dispatch_task_recovery", max_retries=0)
+def dispatch_task_recovery_job() -> dict[str, int | bool]:
+    result = run_worker_coroutine(recover_stale_tasks_with_new_session(settings))
+    redispatched = 0
+    for task_id in result.pop("redispatch_task_ids"):
+        try:
+            execute_task_job.delay(task_id)
+            redispatched += 1
+        except Exception:
+            logger.exception("Failed to redispatch a recovered task", extra={"task_id": task_id})
+    return {
+        "enabled": bool(result["enabled"]),
+        "scanned": int(result["scanned"]),
+        "stale": int(result["stale"]),
+        "reset_for_retry": int(result["reset_for_retry"]),
+        "quarantined": int(result["quarantined"]),
+        "redispatched": redispatched,
     }
 
 

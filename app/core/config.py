@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     review_max_reworks: int = Field(default=1, ge=0, le=3)
     task_max_attempts: int = Field(default=3, ge=1, le=10)
     task_timeout_seconds: int = Field(default=600, ge=30, le=3600)
+    task_recovery_enabled: bool = True
+    task_recovery_interval_seconds: int = Field(default=60, ge=30, le=3_600)
+    task_dispatch_stale_seconds: int = Field(default=300, ge=60, le=86_400)
+    task_recovery_grace_seconds: int = Field(default=120, ge=30, le=3_600)
+    task_recovery_limit: int = Field(default=100, ge=1, le=500)
     delegation_max_depth: int = Field(default=3, ge=1, le=10)
     delegation_max_children: int = Field(default=5, ge=1, le=50)
     delegation_max_token_budget: int = Field(default=50_000, ge=1, le=1_000_000)

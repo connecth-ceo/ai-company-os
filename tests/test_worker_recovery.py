@@ -1,7 +1,9 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.db import SessionLocal
 from app.models import (
     AuditEvent,
@@ -11,6 +13,7 @@ from app.models import (
     WorkflowDefinition,
     WorkflowRun,
 )
+from app.services.task_recovery import recover_stale_tasks
 from app.services.task_service import (
     execute_task_with_new_session,
     mark_task_worker_failure_with_new_session,
@@ -48,6 +51,14 @@ def test_execution_attempt_recovery_tick_is_registered_fail_closed():
     assert schedule["task"] == "ai_company.dispatch_execution_attempt_recovery"
     assert schedule["schedule"] == 60.0
     assert "ai_company.dispatch_execution_attempt_recovery" in celery_app.tasks
+
+
+def test_stale_task_recovery_tick_is_registered():
+    schedule = celery_app.conf.beat_schedule["task-recovery-tick"]
+
+    assert schedule["task"] == "ai_company.dispatch_task_recovery"
+    assert schedule["schedule"] == 60.0
+    assert "ai_company.dispatch_task_recovery" in celery_app.tasks
 
 
 async def test_redelivered_worker_task_recovers_interrupted_run():
@@ -188,4 +199,39 @@ async def test_unexpected_worker_failure_is_visible_on_the_task_and_audit_log():
     assert failed_run.status == TaskStatus.FAILED
     assert failed_workflow is not None
     assert failed_workflow.status == "failed"
+    assert audit is not None
+
+
+async def test_stale_dispatch_without_a_run_is_reset_for_safe_redispatch():
+    now = datetime.now(UTC)
+    async with SessionLocal() as session:
+        task = Task(
+            title="Stale dispatch before start",
+            request="실행 전 정체 업무를 복구해줘.",
+            status=TaskStatus.DISPATCHED,
+            updated_at=now - timedelta(minutes=10),
+        )
+        session.add(task)
+        await session.commit()
+        task_id = task.id
+
+    settings = get_settings().model_copy(
+        update={"task_recovery_enabled": True, "task_dispatch_stale_seconds": 300}
+    )
+    async with SessionLocal() as session:
+        result = await recover_stale_tasks(session, settings=settings, now=now)
+
+    async with SessionLocal() as session:
+        recovered_task = await session.get(Task, task_id)
+        audit = await session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.resource_id == task_id,
+                AuditEvent.action == "task.recovered_before_start",
+            )
+        )
+
+    assert result["reset_for_retry"] == 1
+    assert result["redispatch_task_ids"] == [task_id]
+    assert recovered_task is not None
+    assert recovered_task.status == TaskStatus.QUEUED
     assert audit is not None
