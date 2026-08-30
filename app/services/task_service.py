@@ -335,3 +335,57 @@ async def execute_task_with_new_session(
                         await session.commit()
     if raise_on_failure and last_error:
         raise last_error
+
+
+async def mark_task_worker_failure_with_new_session(task_id: str, exc: Exception) -> None:
+    """Persist failures that happen outside the normal task execution transaction."""
+
+    from app.db import SessionLocal
+
+    error = f"{type(exc).__name__}: {exc}"[:2000]
+    async with SessionLocal() as session:
+        task = await session.get(Task, task_id)
+        if task is None or task.status == TaskStatus.COMPLETED:
+            return
+        if task.status == TaskStatus.FAILED and task.error == error:
+            return
+
+        task.status = TaskStatus.FAILED
+        task.error = error
+        finished_at = datetime.now(UTC)
+        running_runs = list(
+            await session.scalars(
+                select(TaskRun).where(
+                    TaskRun.task_id == task.id,
+                    TaskRun.status == TaskStatus.RUNNING,
+                )
+            )
+        )
+        for run in running_runs:
+            run.status = TaskStatus.FAILED
+            run.feedback = error
+            run.finished_at = finished_at
+
+        if running_runs:
+            workflow_runs = list(
+                await session.scalars(
+                    select(WorkflowRun).where(
+                        WorkflowRun.task_run_id.in_([run.id for run in running_runs])
+                    )
+                )
+            )
+            for workflow_run in workflow_runs:
+                workflow_run.status = "failed"
+                workflow_run.error = error
+                workflow_run.finished_at = finished_at
+
+        add_audit_event(
+            session,
+            tenant_id=task.tenant_id,
+            actor="system",
+            action="task.worker_failed",
+            resource_type="task",
+            resource_id=task.id,
+            details={"error": error, "running_runs": len(running_runs)},
+        )
+        await session.commit()

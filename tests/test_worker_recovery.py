@@ -3,8 +3,18 @@ import asyncio
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import Task, TaskRun, TaskStatus
-from app.services.task_service import execute_task_with_new_session
+from app.models import (
+    AuditEvent,
+    Task,
+    TaskRun,
+    TaskStatus,
+    WorkflowDefinition,
+    WorkflowRun,
+)
+from app.services.task_service import (
+    execute_task_with_new_session,
+    mark_task_worker_failure_with_new_session,
+)
 from app.worker import celery_app
 
 
@@ -114,3 +124,68 @@ async def test_redelivery_after_completion_is_a_noop():
         runs = list(await session.scalars(select(TaskRun).where(TaskRun.task_id == task_id)))
 
     assert len(runs) == 1
+
+
+async def test_unexpected_worker_failure_is_visible_on_the_task_and_audit_log():
+    async with SessionLocal() as session:
+        task = Task(
+            title="Unexpected worker failure",
+            request="Worker 경계 오류를 기록해줘.",
+            status=TaskStatus.RUNNING,
+        )
+        session.add(task)
+        await session.flush()
+        run = TaskRun(task_id=task.id, status=TaskStatus.RUNNING, attempt=1)
+        session.add(run)
+        await session.flush()
+        definition = WorkflowDefinition(
+            workflow_key="general_v1",
+            version="1.0.0",
+            name="General",
+            description="Test workflow",
+            definition={},
+            checksum="0" * 64,
+        )
+        session.add(definition)
+        await session.flush()
+        workflow_run = WorkflowRun(
+            tenant_id=task.tenant_id,
+            task_id=task.id,
+            task_run_id=run.id,
+            definition_id=definition.id,
+            workflow_key="general_v1",
+            workflow_version="1.0.0",
+            status="running",
+            definition_snapshot={},
+            execution_plan={},
+        )
+        session.add(workflow_run)
+        await session.commit()
+        task_id = task.id
+        run_id = run.id
+        workflow_run_id = workflow_run.id
+
+    await mark_task_worker_failure_with_new_session(
+        task_id,
+        RuntimeError("future attached to a different loop"),
+    )
+
+    async with SessionLocal() as session:
+        failed_task = await session.get(Task, task_id)
+        failed_run = await session.get(TaskRun, run_id)
+        failed_workflow = await session.get(WorkflowRun, workflow_run_id)
+        audit = await session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.resource_id == task_id,
+                AuditEvent.action == "task.worker_failed",
+            )
+        )
+
+    assert failed_task is not None
+    assert failed_task.status == TaskStatus.FAILED
+    assert failed_task.error == "RuntimeError: future attached to a different loop"
+    assert failed_run is not None
+    assert failed_run.status == TaskStatus.FAILED
+    assert failed_workflow is not None
+    assert failed_workflow.status == "failed"
+    assert audit is not None
